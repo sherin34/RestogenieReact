@@ -244,7 +244,7 @@ const MenuItemManagement = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   {item.imageUrl && (
                     <img 
-                      src={`http://localhost:8080${item.imageUrl}`} 
+                      src={`${import.meta.env.VITE_IMAGE_BASE_URL || 'http://localhost:8080'}${item.imageUrl}`} 
                       alt={item.name} 
                       style={{ width: '40px', height: '40px', borderRadius: '4px', objectFit: 'cover' }} 
                     />
