@@ -1,0 +1,116 @@
+import { useState, useEffect } from 'react';
+import api from '../services/api';
+
+export const useOffline = () => {
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [subscriptionValid, setSubscriptionValid] = useState(true);
+  const [subscriptionMessage, setSubscriptionMessage] = useState('');
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOffline(false);
+      syncOfflineOrders();
+    };
+    const handleOffline = () => setIsOffline(true);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Initial check and sync
+    if (navigator.onLine) {
+      checkSubscription();
+      syncOfflineOrders();
+    } else {
+      checkOfflineSubscription();
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  const checkSubscription = async () => {
+    try {
+      const res = await api.get('/subscription/status');
+      const { validTill } = res.data;
+      localStorage.setItem('validTill', validTill);
+      validateDate(validTill);
+    } catch (err) {
+      console.error('Subscription check failed', err);
+      checkOfflineSubscription();
+    }
+  };
+
+  const checkOfflineSubscription = () => {
+    const validTill = localStorage.getItem('validTill');
+    if (validTill) {
+      validateDate(validTill);
+    } else {
+      // If we've never been online to check, we might allow or block
+      // The requirement says "On app load (when online) ... Store validTill"
+      // If offline and no validTill, we might want to block or allow grace period.
+      // Keeping it simple as per requirement.
+    }
+  };
+
+  const validateDate = (validTill) => {
+    const expiryDate = new Date(validTill);
+    const currentDate = new Date();
+    if (currentDate > expiryDate) {
+      setSubscriptionValid(false);
+      setSubscriptionMessage('Subscription expired. Connect to internet.');
+    } else {
+      setSubscriptionValid(true);
+    }
+  };
+
+  const syncOfflineOrders = async () => {
+    const offlineOrders = JSON.parse(localStorage.getItem('offlineOrders') || '[]');
+    if (offlineOrders.length === 0) return;
+
+    setIsSyncing(true);
+    try {
+      await api.post('/orders/sync', offlineOrders);
+      localStorage.setItem('offlineOrders', '[]');
+      console.log('Offline orders synced successfully');
+    } catch (err) {
+      console.error('Sync failed', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const saveOfflineOrder = (order) => {
+    const offlineOrders = JSON.parse(localStorage.getItem('offlineOrders') || '[]');
+    const newOrder = {
+      ...order,
+      clientOrderId: Date.now().toString(),
+      createdAt: new Date().toISOString()
+    };
+    offlineOrders.push(newOrder);
+    localStorage.setItem('offlineOrders', JSON.stringify(offlineOrders));
+    return newOrder;
+  };
+
+  const cacheData = (key, data) => {
+    localStorage.setItem(key, JSON.stringify(data));
+  };
+
+  const getCachedData = (key) => {
+    const data = localStorage.getItem(key);
+    return data ? JSON.parse(data) : null;
+  };
+
+  return {
+    isOffline,
+    isSyncing,
+    subscriptionValid,
+    subscriptionMessage,
+    saveOfflineOrder,
+    cacheData,
+    getCachedData,
+    syncOfflineOrders
+  };
+};

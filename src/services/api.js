@@ -3,7 +3,7 @@ import { getToken } from '../utils/auth';
 
 // Create Axios instance with base URL
 const api = axios.create({
-  baseURL: 'http://localhost:8080/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api',
 });
 
 // Request interceptor to attach JWT token

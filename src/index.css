@@ -108,3 +108,13 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+.desktop-only {
+  display: flex !important;
+}
+
+@media (max-width: 1024px) {
+  .desktop-only {
+    display: none !important;
+  }
+}

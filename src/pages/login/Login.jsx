@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../../services/api';
-import { setToken, setRole, setTenantId } from '../../utils/auth';
+import { setToken, setRole, setTenantId, isAuthenticated, getRole } from '../../utils/auth';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -9,6 +9,17 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Redirect if already logged in
+  React.useEffect(() => {
+    const role = getRole();
+    if (isAuthenticated()) {
+      if (role === 'ADMIN') navigate('/admin');
+      else if (role === 'WAITER') navigate('/pos');
+      else if (role === 'KITCHEN') navigate('/kitchen');
+      else navigate('/');
+    }
+  }, [navigate]);
 
   const handleLogin = async (e) => {
     e.preventDefault();

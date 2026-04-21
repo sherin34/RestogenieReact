@@ -3,6 +3,7 @@ import TablesManagement from '../../components/admin/TablesManagement';
 import CategoryManagement from '../../components/admin/CategoryManagement';
 import MenuItemManagement from '../../components/admin/MenuItemManagement';
 import BillingSettings from '../../components/admin/BillingSettings';
+import StaffManagement from '../../components/admin/StaffManagement';
 
 const Admin = () => {
   const [activeTab, setActiveTab] = useState('billing');
@@ -12,6 +13,7 @@ const Admin = () => {
     { id: 'tables', label: 'Tables', icon: '🪑' },
     { id: 'categories', label: 'Categories', icon: '📁' },
     { id: 'items', label: 'Menu Items', icon: '🍔' },
+    { id: 'staff', label: 'Staff Management', icon: '👥' },
   ];
 
   const renderContent = () => {
@@ -20,6 +22,7 @@ const Admin = () => {
       case 'tables': return <TablesManagement />;
       case 'categories': return <CategoryManagement />;
       case 'items': return <MenuItemManagement />;
+      case 'staff': return <StaffManagement />;
       default: return <BillingSettings />;
     }
   };

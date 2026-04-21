@@ -196,7 +196,7 @@ const KitchenPage = () => {
   return (
     <div className="container" style={{ maxWidth: '1200px' }}>
       {/* KDS Header with Hotkey Controls */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '24px', alignItems: 'center', marginBottom: '16px', padding: '10px 0', borderBottom: '1px solid var(--border-color)' }}>
+      <div className="desktop-only" style={{ display: 'flex', justifyContent: 'flex-end', gap: '24px', alignItems: 'center', marginBottom: '16px', padding: '10px 0', borderBottom: '1px solid var(--border-color)' }}>
         <div style={{ display: 'flex', gap: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
           <span style={{ fontWeight: '700', padding: '2px 6px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}>1-9</span> Select
           <span style={{ fontWeight: '700', padding: '2px 6px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}>P</span> Preparing

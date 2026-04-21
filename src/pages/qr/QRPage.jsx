@@ -336,7 +336,7 @@ const QRPage = () => {
                       <div style={{ display: 'flex', gap: '16px', flex: 1 }}>
                         {item.imageUrl && (
                           <img
-                            src={`http://localhost:8080${item.imageUrl}`}
+                            src={`${import.meta.env.VITE_IMAGE_BASE_URL || 'http://localhost:8080'}${item.imageUrl}`}
                             alt={item.name}
                             style={{ width: '80px', height: '80px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0 }}
                           />

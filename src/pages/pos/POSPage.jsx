@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import api from '../../services/api';
 import { getRole } from '../../utils/auth';
 import { useToast } from '../../context/ToastContext';
+import { useOffline } from '../../hooks/useOffline';
 
 const CartPanel = ({ cartItems, totalBill, updateCartQuantity, isPlacingOrder, onPlaceOrder, selectedTable, expanded, setExpanded, showHotkeys }) => {
   const totalQty = cartItems.reduce((a, i) => a + i.quantity, 0);
@@ -144,6 +145,15 @@ const POSPage = () => {
   const [cartExpanded, setCartExpanded] = useState(false);
   const [showHotkeys, setShowHotkeys] = useState(true);
   
+  const { 
+    isOffline, 
+    subscriptionValid, 
+    subscriptionMessage, 
+    saveOfflineOrder, 
+    cacheData, 
+    getCachedData 
+  } = useOffline();
+  
   // Online Order Details
   const [onlineDetails, setOnlineDetails] = useState({
     customerName: '',
@@ -159,36 +169,51 @@ const POSPage = () => {
 
   useEffect(() => {
     const fetchTables = async () => {
+      if (isOffline) {
+        const cachedTables = getCachedData('tables');
+        if (cachedTables) setTables(cachedTables);
+        return;
+      }
       try {
         const response = await api.get('/admin/tables');
-        // Filter out any real 'ONLINE' table from DB to avoid duplication with our virtual one
         const realTables = response.data.filter(t => t.tableName !== 'ONLINE');
-        // Add virtual ONLINE table with isOnline: true for special logic
         const onlineTable = { id: 'ONLINE', tableName: 'ONLINE', capacity: 0, isActive: true, isOnline: true };
-        setTables([onlineTable, ...realTables]);
+        const allTables = [onlineTable, ...realTables];
+        setTables(allTables);
+        cacheData('tables', allTables);
       } catch (err) {
-        setError(err.response?.data?.message || 'Failed to fetch tables');
+        const cachedTables = getCachedData('tables');
+        if (cachedTables) setTables(cachedTables);
+        else setError(err.response?.data?.message || 'Failed to fetch tables');
       }
     };
     fetchTables();
-  }, []);
+  }, [isOffline]);
 
   useEffect(() => {
     if (selectedTable) {
-      setCartItems([]); // Clear cart when switching tables
-      setCartExpanded(false); // Reset cart state
+      setCartItems([]);
+      setCartExpanded(false);
       setOnlineDetails({ customerName: '', customerPhone: '', notes: '' });
       const fetchMenu = async () => {
+        if (isOffline) {
+          const cachedMenu = getCachedData('menuItems');
+          if (cachedMenu) setMenuItems(cachedMenu);
+          return;
+        }
         try {
           const response = await api.get('/admin/menu-items');
           setMenuItems(response.data);
+          cacheData('menuItems', response.data);
         } catch (err) {
-          setError(err.response?.data?.message || 'Failed to fetch menu items');
+          const cachedMenu = getCachedData('menuItems');
+          if (cachedMenu) setMenuItems(cachedMenu);
+          else setError(err.response?.data?.message || 'Failed to fetch menu items');
         }
       };
       fetchMenu();
     }
-  }, [selectedTable]);
+  }, [selectedTable, isOffline]);
 
   // Combined Keydown Listener
   useEffect(() => {
@@ -271,19 +296,29 @@ const POSPage = () => {
     setShowConfirm(false);
     setCartExpanded(false);
     setIsPlacingOrder(true);
-    try {
-      const payload = {
-        tableId: selectedTable.isOnline ? null : selectedTable.id,
-        orderSource: selectedTable.isOnline ? "ONLINE" : "POS",
-        items: cartItems.map(i => ({
-          menuItemId: i.itemId,
-          quantity: i.quantity
-        })),
-        customerName: onlineDetails.customerName,
-        customerPhone: onlineDetails.customerPhone,
-        notes: onlineDetails.notes
-      };
+    
+    const payload = {
+      tableId: selectedTable.isOnline ? null : selectedTable.id,
+      orderSource: selectedTable.isOnline ? "ONLINE" : "POS",
+      items: cartItems.map(i => ({
+        menuItemId: i.itemId,
+        quantity: i.quantity
+      })),
+      customerName: onlineDetails.customerName,
+      customerPhone: onlineDetails.customerPhone,
+      notes: onlineDetails.notes
+    };
 
+    if (isOffline) {
+      saveOfflineOrder(payload);
+      setCartItems([]);
+      setOnlineDetails({ customerName: '', customerPhone: '', notes: '' });
+      showToast('Order saved offline', 'success');
+      setIsPlacingOrder(false);
+      return;
+    }
+
+    try {
       await api.post('/orders', payload);
       setCartItems([]);
       setOnlineDetails({ customerName: '', customerPhone: '', notes: '' });
@@ -300,29 +335,46 @@ const POSPage = () => {
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '10px 20px', backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)', gap: '20px', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+      <div className="desktop-only" style={{ display: 'flex', justifyContent: 'flex-end', gap: '24px', alignItems: 'center', padding: '10px 24px', backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)', fontSize: '13px' }}>
+        <div style={{ display: 'flex', gap: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
           <span style={{ fontWeight: '700', padding: '2px 6px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}>F8</span> Clear Cart
-          <span style={{ marginLeft: '12px', fontWeight: '700', padding: '2px 6px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}>ESC</span> Cancel
+          <span style={{ fontWeight: '700', padding: '2px 6px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}>ESC</span> Cancel
         </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', userSelect: 'none', borderLeft: '1px solid var(--border-color)', paddingLeft: '20px' }}>
-          <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)' }}>HOTKEY INDICATORS</span>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', userSelect: 'none' }}>
+          <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>HOTKEYS</span>
           <div 
             onClick={() => setShowHotkeys(!showHotkeys)}
             style={{
-              width: '40px', height: '20px', borderRadius: '10px',
+              width: '36px', height: '18px', borderRadius: '9px',
               backgroundColor: showHotkeys ? 'var(--primary-color)' : '#ccc',
               position: 'relative', transition: 'background-color 0.2s'
             }}
           >
             <div style={{
-              width: '16px', height: '16px', borderRadius: '50%', backgroundColor: 'white',
-              position: 'absolute', top: '2px', left: showHotkeys ? '22px' : '2px',
+              width: '14px', height: '14px', borderRadius: '50%', backgroundColor: 'white',
+              position: 'absolute', top: '2px', left: showHotkeys ? '20px' : '2px',
               transition: 'left 0.2s'
             }} />
           </div>
         </label>
       </div>
+
+      {isOffline && (
+        <div style={{ backgroundColor: '#f59e0b', color: 'white', padding: '10px 20px', textAlign: 'center', fontWeight: 'bold' }}>
+          ⚠️ Offline Mode - Orders will sync later
+        </div>
+      )}
+
+      {!subscriptionValid && (
+        <div style={{ 
+          position: 'fixed', inset: 0, zIndex: 1000, backgroundColor: 'rgba(0,0,0,0.9)', 
+          color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', 
+          padding: '20px', textAlign: 'center' 
+        }}>
+          <h2 style={{ fontSize: '32px', marginBottom: '20px' }}>⚠️ Session Blocked</h2>
+          <p style={{ fontSize: '18px', maxWidth: '500px' }}>{subscriptionMessage}</p>
+        </div>
+      )}
 
       <div className="pos-layout" style={{ marginBottom: cartItems.length > 0 ? '100px' : '0' }}>
         <div className="pos-tables-col">
@@ -447,7 +499,7 @@ const POSPage = () => {
                         <div style={{ display: 'flex', gap: '16px', flex: 1, minWidth: 0 }}>
                           {item.imageUrl && (
                             <img 
-                              src={`http://localhost:8080${item.imageUrl}`} 
+                              src={`${import.meta.env.VITE_IMAGE_BASE_URL || 'http://localhost:8080'}${item.imageUrl}`} 
                               alt={item.name} 
                               style={{ width: '80px', height: '80px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0 }} 
                             />

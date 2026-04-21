@@ -42,7 +42,10 @@ const TablesManagement = () => {
       setEditingId(null);
       fetchTables();
     } catch (err) {
-      showToast(err.response?.data?.message || 'Operation failed', 'error');
+      const errorMsg = typeof err.response?.data === 'string' 
+        ? err.response.data 
+        : err.response?.data?.message || 'Operation failed';
+      showToast(errorMsg, 'error');
     } finally {
       setIsLoading(false);
     }

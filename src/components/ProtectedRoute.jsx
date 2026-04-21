@@ -1,13 +1,20 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
-import { getToken } from '../utils/auth';
+import { isAuthenticated, getRole, clearAuth } from '../utils/auth';
 
-const ProtectedRoute = ({ children }) => {
-  const token = getToken();
+const ProtectedRoute = ({ children, allowedRoles }) => {
+  const isAuth = isAuthenticated();
+  const userRole = getRole();
 
-  if (!token) {
-    // If no token exists, redirect to login page
+  if (!isAuth) {
+    // If not authenticated or token expired, clear and redirect
+    clearAuth();
     return <Navigate to="/login" replace />;
+  }
+
+  if (allowedRoles && !allowedRoles.includes(userRole)) {
+    // If role is not allowed, redirect to a safe page (e.g. dashboard or home)
+    return <Navigate to="/" replace />;
   }
 
   // Otherwise, render the requested component

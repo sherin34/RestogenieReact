@@ -26,7 +26,7 @@ function App() {
           <Route 
             path="/qr-codes" 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['ADMIN']}>
                 <QRGeneratorPage />
               </ProtectedRoute>
             } 
@@ -34,7 +34,7 @@ function App() {
           <Route 
             path="/dashboard" 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['ADMIN']}>
                 <DashboardPage />
               </ProtectedRoute>
             } 
@@ -42,7 +42,7 @@ function App() {
           <Route 
             path="/admin" 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['ADMIN']}>
                 <Admin />
               </ProtectedRoute>
             } 
@@ -50,7 +50,7 @@ function App() {
           <Route 
             path="/reports" 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['ADMIN']}>
                 <ReportsPage />
               </ProtectedRoute>
             } 
@@ -58,7 +58,7 @@ function App() {
           <Route 
             path="/pos" 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['ADMIN', 'WAITER']}>
                 <POSPage />
               </ProtectedRoute>
             } 
@@ -66,7 +66,7 @@ function App() {
           <Route 
             path="/kitchen" 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['ADMIN', 'KITCHEN']}>
                 <KitchenPage />
               </ProtectedRoute>
             } 
@@ -74,7 +74,7 @@ function App() {
           <Route 
             path="/billing" 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['ADMIN', 'WAITER']}>
                 <BillingPage />
               </ProtectedRoute>
             } 
