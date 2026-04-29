@@ -2,12 +2,16 @@ import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { clearAuth, getRole } from '../utils/auth';
 import api from '../services/api';
+import { useOffline } from '../hooks/useOffline';
 
 const Layout = ({ children }) => {
+  const { isReadOnly, subscriptionStatus } = useOffline();
   const [menuOpen, setMenuOpen] = useState(false);
   const [restaurantName, setRestaurantName] = useState('RestoGenie');
   const location = useLocation();
   const role = getRole();
+
+  const [logoUrl, setLogoUrl] = useState(null);
 
   React.useEffect(() => {
     const fetchBranding = async () => {
@@ -16,6 +20,16 @@ const Layout = ({ children }) => {
         try {
           const res = await api.get('/admin/restaurant');
           setRestaurantName(res.data.name);
+          
+          if (res.data.branding) {
+            const b = res.data.branding;
+            if (b.primaryColor) {
+              document.documentElement.style.setProperty('--primary-color', b.primaryColor);
+            }
+            if (b.logoUrl) {
+              setLogoUrl(`${import.meta.env.VITE_IMAGE_BASE_URL || 'http://localhost:8080'}${b.logoUrl}`);
+            }
+          }
         } catch (err) {
           // Fallback to product name if fetch fails
           setRestaurantName('RestoGenie');
@@ -44,6 +58,34 @@ const Layout = ({ children }) => {
 
   return (
     <>
+      {subscriptionStatus?.status === 'GRACE_PERIOD' && (
+        <div style={{ 
+          backgroundColor: '#FFFBEB', 
+          color: '#92400E', 
+          padding: '10px 20px', 
+          textAlign: 'center', 
+          fontSize: '14px', 
+          fontWeight: '600',
+          borderBottom: '1px solid #FCD34D'
+        }}>
+          ⚠️ Your subscription is in a grace period. Please <Link to="/admin?tab=subscription" style={{ color: '#D97706', textDecoration: 'underline' }}>renew now</Link> to avoid service interruption.
+        </div>
+      )}
+
+      {isReadOnly && (
+        <div style={{ 
+          backgroundColor: '#FEF2F2', 
+          color: '#991B1B', 
+          padding: '10px 20px', 
+          textAlign: 'center', 
+          fontSize: '14px', 
+          fontWeight: '700',
+          borderBottom: '1px solid #FECACA'
+        }}>
+          🔒 Subscription Expired. Read-only mode active. <Link to="/admin?tab=subscription" style={{ color: '#DC2626', textDecoration: 'underline' }}>Activate Subscription</Link>
+        </div>
+      )}
+
       {!isGuestPage && (
         <nav className="nav-bar">
           {/* Logo / Restaurant Name */}
@@ -60,7 +102,12 @@ const Layout = ({ children }) => {
             textOverflow: 'ellipsis',
             maxWidth: '200px'
           }}>
-            <span style={{ color: 'var(--primary-color)' }}>🍽</span> {restaurantName}
+            {logoUrl ? (
+              <img src={logoUrl} alt={restaurantName} style={{ height: '24px', width: '24px', borderRadius: '4px', objectFit: 'contain' }} />
+            ) : (
+              <span style={{ color: 'var(--primary-color)' }}>🍽</span>
+            )} 
+            {restaurantName}
           </div>
 
           {/* Desktop nav links */}

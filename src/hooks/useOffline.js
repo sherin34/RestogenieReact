@@ -6,6 +6,7 @@ export const useOffline = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [subscriptionValid, setSubscriptionValid] = useState(true);
   const [subscriptionMessage, setSubscriptionMessage] = useState('');
+  const [subscriptionStatus, setSubscriptionStatus] = useState(null);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -34,8 +35,10 @@ export const useOffline = () => {
   const checkSubscription = async () => {
     try {
       const res = await api.get('/subscription/status');
+      setSubscriptionStatus(res.data);
       const { validTill } = res.data;
       localStorage.setItem('validTill', validTill);
+      localStorage.setItem('subscriptionStatus', JSON.stringify(res.data));
       validateDate(validTill);
     } catch (err) {
       console.error('Subscription check failed', err);
@@ -45,13 +48,10 @@ export const useOffline = () => {
 
   const checkOfflineSubscription = () => {
     const validTill = localStorage.getItem('validTill');
+    const status = localStorage.getItem('subscriptionStatus');
+    if (status) setSubscriptionStatus(JSON.parse(status));
     if (validTill) {
       validateDate(validTill);
-    } else {
-      // If we've never been online to check, we might allow or block
-      // The requirement says "On app load (when online) ... Store validTill"
-      // If offline and no validTill, we might want to block or allow grace period.
-      // Keeping it simple as per requirement.
     }
   };
 
@@ -60,11 +60,13 @@ export const useOffline = () => {
     const currentDate = new Date();
     if (currentDate > expiryDate) {
       setSubscriptionValid(false);
-      setSubscriptionMessage('Subscription expired. Connect to internet.');
+      setSubscriptionMessage('Subscription expired. Please renew to continue.');
     } else {
       setSubscriptionValid(true);
     }
   };
+
+  const isReadOnly = !subscriptionValid && subscriptionStatus?.status !== 'GRACE_PERIOD';
 
   const syncOfflineOrders = async () => {
     const offlineOrders = JSON.parse(localStorage.getItem('offlineOrders') || '[]');
@@ -107,7 +109,9 @@ export const useOffline = () => {
     isOffline,
     isSyncing,
     subscriptionValid,
+    subscriptionStatus,
     subscriptionMessage,
+    isReadOnly,
     saveOfflineOrder,
     cacheData,
     getCachedData,

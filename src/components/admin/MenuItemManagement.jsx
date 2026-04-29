@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { useToast } from '../../context/ToastContext';
-import ConfirmDialog from '../common/ConfirmDialog';
+import { useOffline } from '../../hooks/useOffline';
+import MenuScanner from './MenuScanner';
 
 const MenuItemManagement = () => {
+  const { isReadOnly } = useOffline();
   const { showToast } = useToast();
   const [menuItems, setMenuItems] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -14,12 +16,12 @@ const MenuItemManagement = () => {
     gstPercentage: '5',
     description: '',
     isOnlineAvailable: false,
-    onlinePrice: ''
+    onlinePrice: '',
+    isAvailable: true
   });
   const [selectedFile, setSelectedFile] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState({ show: false, id: null });
 
   const fetchData = async () => {
     try {
@@ -70,7 +72,7 @@ const MenuItemManagement = () => {
         showToast('Item added successfully', 'success');
       }
 
-      setFormData({ name: '', price: '', categoryId: '', gstPercentage: '5', description: '', isOnlineAvailable: false, onlinePrice: '' });
+      setFormData({ name: '', price: '', categoryId: '', gstPercentage: '5', description: '', isOnlineAvailable: false, onlinePrice: '', isAvailable: true });
       setSelectedFile(null);
       setEditingId(null);
       // Reset file input
@@ -94,29 +96,53 @@ const MenuItemManagement = () => {
       gstPercentage: item.gstPercentage.toString(),
       description: item.description || '',
       isOnlineAvailable: item.isOnlineAvailable || false,
-      onlinePrice: item.onlinePrice ? item.onlinePrice.toString() : ''
+      onlinePrice: item.onlinePrice ? item.onlinePrice.toString() : '',
+      isAvailable: item.isAvailable !== false
     });
     setSelectedFile(null);
   };
 
-  const handleDelete = (id) => {
-    setDeleteConfirm({ show: true, id });
-  };
-
-  const confirmDelete = async () => {
-    const id = deleteConfirm.id;
-    setDeleteConfirm({ show: false, id: null });
+  const handleToggleAvailability = async (id, currentStatus) => {
+    if (isReadOnly) return;
     try {
-      await api.delete(`/admin/menu-items/${id}`);
-      showToast('Item deleted', 'success');
+      await api.put(`/admin/menu-items/${id}/availability`, { isAvailable: !currentStatus });
+      showToast('Availability updated', 'success');
       fetchData();
     } catch (err) {
-      showToast('Failed to delete item', 'error');
+      showToast('Failed to update availability', 'error');
     }
   };
 
+  const handleMove = async (id, direction) => {
+    try {
+      await api.post(`/admin/menu-items/${id}/move`, { direction });
+      fetchData();
+    } catch (err) {
+      showToast('Failed to change order', 'error');
+    }
+  };
+
+  const groupedItems = categories.map(cat => ({
+    ...cat,
+    items: menuItems
+      .filter(item => item.category?.id === cat.id)
+      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+  })).filter(cat => cat.items.length > 0);
+
+  const uncategorizedItems = menuItems
+    .filter(item => !item.category)
+    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+
+  if (uncategorizedItems.length > 0) {
+    groupedItems.push({ id: 'none', name: 'Uncategorized', items: uncategorizedItems });
+  }
+
   return (
     <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+        <h2 style={{ fontSize: '18px', fontWeight: '700', margin: 0 }}>Menu Item Management</h2>
+        <MenuScanner onScanSuccess={fetchData} />
+      </div>
       <form onSubmit={handleSubmit} style={{ marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '14px', backgroundColor: 'var(--bg-color)', padding: '20px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
         <div className="form-grid-4">
           <div>
@@ -215,7 +241,7 @@ const MenuItemManagement = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-          <button type="submit" className="btn-primary" disabled={isSaving} style={{ padding: '10px 24px' }}>
+          <button type="submit" className="btn-primary" disabled={isSaving || isReadOnly} style={{ padding: '10px 24px' }}>
             {editingId ? 'Update Item' : 'Add Item'}
           </button>
           {editingId && (
@@ -230,72 +256,117 @@ const MenuItemManagement = () => {
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--border-color)' }}>
+            <th style={{ padding: '12px 8px', width: '80px' }}>Order</th>
             <th style={{ padding: '12px 8px' }}>Name</th>
-            <th style={{ padding: '12px 8px' }}>Category</th>
             <th style={{ padding: '12px 8px' }}>Base Price</th>
             <th style={{ padding: '12px 8px' }}>Online</th>
+            <th style={{ padding: '12px 8px' }}>Availability</th>
             <th style={{ padding: '12px 8px', textAlign: 'right' }}>Actions</th>
           </tr>
         </thead>
         <tbody>
-          {menuItems.map((item) => (
-            <tr key={item.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-              <td style={{ padding: '12px 8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  {item.imageUrl && (
-                    <img 
-                      src={`${import.meta.env.VITE_IMAGE_BASE_URL || 'http://localhost:8080'}${item.imageUrl}`} 
-                      alt={item.name} 
-                      style={{ width: '40px', height: '40px', borderRadius: '4px', objectFit: 'cover' }} 
-                    />
+          {groupedItems.map((group) => (
+            <React.Fragment key={group.id}>
+              <tr style={{ backgroundColor: 'var(--bg-secondary)' }}>
+                <td colSpan="6" style={{ padding: '8px 12px', fontWeight: '800', fontSize: '12px', color: 'var(--primary-color)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                  {group.name}
+                </td>
+              </tr>
+              {group.items.map((item, index) => (
+              <tr 
+                key={item.id} 
+                style={{ 
+                  borderBottom: '1px solid var(--border-color)',
+                  opacity: item.isAvailable === false ? 0.6 : 1,
+                  backgroundColor: item.isAvailable === false ? 'var(--bg-secondary)' : 'white',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <td style={{ padding: '12px 8px' }}>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button 
+                      onClick={() => handleMove(item.id, 'UP')} 
+                      disabled={index === 0 || isReadOnly}
+                      style={{ background: 'none', border: 'none', cursor: index === 0 ? 'default' : 'pointer', fontSize: '18px', padding: '0 4px', color: index === 0 ? '#ccc' : 'var(--primary-color)' }}
+                      title="Move Up"
+                    >
+                      ▲
+                    </button>
+                    <button 
+                      onClick={() => handleMove(item.id, 'DOWN')} 
+                      disabled={index === group.items.length - 1 || isReadOnly}
+                      style={{ background: 'none', border: 'none', cursor: index === group.items.length - 1 ? 'default' : 'pointer', fontSize: '18px', padding: '0 4px', color: index === group.items.length - 1 ? '#ccc' : 'var(--primary-color)' }}
+                      title="Move Down"
+                    >
+                      ▼
+                    </button>
+                  </div>
+                </td>
+                <td style={{ padding: '12px 8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    {item.imageUrl && (
+                      <img 
+                        src={`${import.meta.env.VITE_IMAGE_BASE_URL || 'http://localhost:8080'}${item.imageUrl}`} 
+                        alt={item.name} 
+                        style={{ width: '40px', height: '40px', borderRadius: '4px', objectFit: 'cover' }} 
+                      />
+                    )}
+                    <div>
+                      <div style={{ fontWeight: '600' }}>{item.name}</div>
+                      {item.description && <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{item.description}</div>}
+                    </div>
+                  </div>
+                </td>
+                <td style={{ padding: '12px 8px' }}>
+                  <div style={{ fontWeight: '500' }}>₹{parseFloat(item.price).toFixed(2)}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>GST: {item.gstPercentage}%</div>
+                </td>
+                <td style={{ padding: '12px 8px' }}>
+                  {item.isOnlineAvailable ? (
+                    <div>
+                      <span style={{ color: '#10B981', fontWeight: '700', fontSize: '12px' }}>🟢 YES</span>
+                      {item.onlinePrice && <div style={{ fontSize: '11px', fontWeight: '600' }}>₹{item.onlinePrice.toFixed(2)}</div>}
+                    </div>
+                  ) : (
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>⚪ NO</span>
                   )}
-                  <div>
-                    <div style={{ fontWeight: '600' }}>{item.name}</div>
-                    {item.description && <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{item.description}</div>}
-                  </div>
-                </div>
-              </td>
-              <td style={{ padding: '12px 8px' }}>{item.category?.name || 'Uncategorized'}</td>
-              <td style={{ padding: '12px 8px' }}>
-                <div style={{ fontWeight: '500' }}>₹{parseFloat(item.price).toFixed(2)}</div>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>GST: {item.gstPercentage}%</div>
-              </td>
-              <td style={{ padding: '12px 8px' }}>
-                {item.isOnlineAvailable ? (
-                  <div>
-                    <span style={{ color: '#10B981', fontWeight: '700', fontSize: '12px' }}>🟢 YES</span>
-                    {item.onlinePrice && <div style={{ fontSize: '11px', fontWeight: '600' }}>₹{item.onlinePrice.toFixed(2)}</div>}
-                  </div>
-                ) : (
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>⚪ NO</span>
-                )}
-              </td>
-              <td style={{ padding: '12px 8px', textAlign: 'right' }}>
-                <button onClick={() => handleEdit(item)} className="btn-secondary" style={{ padding: '4px 12px', marginRight: '8px', fontSize: '13px' }}>
-                  Edit
-                </button>
-                <button onClick={() => handleDelete(item.id)} className="btn-danger" style={{ padding: '4px 12px', fontSize: '13px' }}>
-                  Delete
-                </button>
-              </td>
-            </tr>
+                </td>
+                <td style={{ padding: '12px 8px' }}>
+                  <button 
+                    onClick={() => handleToggleAvailability(item.id, item.isAvailable !== false)}
+                    disabled={isReadOnly}
+                    style={{ 
+                      padding: '6px 12px', 
+                      borderRadius: '20px', 
+                      border: 'none', 
+                      fontSize: '11px', 
+                      fontWeight: '700',
+                      cursor: isReadOnly ? 'not-allowed' : 'pointer',
+                      backgroundColor: item.isAvailable !== false ? '#dcfce7' : '#f1f5f9',
+                      color: item.isAvailable !== false ? '#166534' : '#64748b',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    {item.isAvailable !== false ? '● ENABLED' : '○ DISABLED'}
+                  </button>
+                </td>
+                <td style={{ padding: '12px 8px', textAlign: 'right' }}>
+                  <button onClick={() => handleEdit(item)} className="btn-secondary" disabled={isReadOnly} style={{ padding: '4px 12px', fontSize: '13px' }}>
+                    Edit
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </React.Fragment>
           ))}
           {menuItems.length === 0 && (
             <tr>
-              <td colSpan="5" style={{ textAlign: 'center', padding: '40px' }}>No items found.</td>
+              <td colSpan="6" style={{ textAlign: 'center', padding: '40px' }}>No items found.</td>
             </tr>
           )}
         </tbody>
       </table>
       </div>
-      <ConfirmDialog 
-        isOpen={deleteConfirm.show}
-        title="Delete Menu Item"
-        message="Are you sure you want to delete this menu item? This will remove it from all menus permanently."
-        onConfirm={confirmDelete}
-        onCancel={() => setDeleteConfirm({ show: false, id: null })}
-        confirmText="Confirm Delete"
-      />
     </div>
   );
 };

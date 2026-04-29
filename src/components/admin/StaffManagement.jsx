@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { useToast } from '../../context/ToastContext';
+import { useOffline } from '../../hooks/useOffline';
 
 const StaffManagement = () => {
   const [staff, setStaff] = useState([]);
@@ -13,6 +14,7 @@ const StaffManagement = () => {
     role: 'WAITER'
   });
   const [issubmitting, setIsSubmitting] = useState(false);
+  const { isReadOnly } = useOffline();
   const { showToast } = useToast();
 
   const fetchStaff = async () => {
@@ -107,6 +109,7 @@ const StaffManagement = () => {
           <button 
             className="btn-primary" 
             onClick={() => setIsModalOpen(true)}
+            disabled={isReadOnly}
             style={{ padding: '8px 16px', fontSize: '13px' }}
           >
             + Add Staff
@@ -148,8 +151,9 @@ const StaffManagement = () => {
                         <input 
                           type="checkbox" 
                           checked={member.active !== false} 
-                          onChange={() => handleToggleStatus(member.id)}
-                          style={{ opacity: 0, width: 0, height: 0 }}
+                          onChange={() => !isReadOnly && handleToggleStatus(member.id)}
+                          disabled={isReadOnly}
+                          style={{ opacity: 0, width: 0, height: 0, cursor: isReadOnly ? 'not-allowed' : 'pointer' }}
                         />
                         <span style={{
                           position: 'absolute', cursor: 'pointer', inset: 0,
@@ -166,7 +170,8 @@ const StaffManagement = () => {
                     <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                       <button 
                         onClick={() => handleDeleteStaff(member.id)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#ef4444' }}
+                        disabled={isReadOnly}
+                        style={{ background: 'none', border: 'none', cursor: isReadOnly ? 'not-allowed' : 'pointer', fontSize: '16px', color: '#ef4444', opacity: isReadOnly ? 0.5 : 1 }}
                       >
                         🗑️
                       </button>

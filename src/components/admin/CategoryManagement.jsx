@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import ConfirmDialog from '../common/ConfirmDialog';
+import { useOffline } from '../../hooks/useOffline';
 
 const CategoryManagement = () => {
+  const { isReadOnly } = useOffline();
   const { showToast } = useToast();
   const [categories, setCategories] = useState([]);
   const [name, setName] = useState('');
@@ -68,6 +70,17 @@ const CategoryManagement = () => {
     }
   };
 
+  const handleMove = async (id, direction) => {
+    try {
+      await api.post(`/admin/categories/${id}/move`, { direction });
+      fetchCategories();
+    } catch (err) {
+      showToast('Failed to change order', 'error');
+    }
+  };
+
+  const sortedCategories = [...categories].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+
   return (
     <div>
       <form onSubmit={handleSubmit} style={{ marginBottom: '24px', display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end', backgroundColor: 'var(--bg-color)', padding: '20px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
@@ -83,7 +96,7 @@ const CategoryManagement = () => {
           />
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button type="submit" className="btn-primary" disabled={isSaving} style={{ padding: '10px 20px' }}>
+          <button type="submit" className="btn-primary" disabled={isSaving || isReadOnly} style={{ padding: '10px 20px' }}>
             {editingId ? 'Update Category' : 'Add Category'}
           </button>
           {editingId && (
@@ -98,14 +111,35 @@ const CategoryManagement = () => {
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--border-color)' }}>
+            <th style={{ padding: '12px 8px', width: '80px' }}>Order</th>
             <th style={{ padding: '12px 8px' }}>Category Name</th>
             <th style={{ padding: '12px 8px' }}>Status</th>
             <th style={{ padding: '12px 8px', textAlign: 'right' }}>Actions</th>
           </tr>
         </thead>
         <tbody>
-          {categories.map((cat) => (
+          {sortedCategories.map((cat, index) => (
             <tr key={cat.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+              <td style={{ padding: '12px 8px' }}>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button 
+                    onClick={() => handleMove(cat.id, 'UP')} 
+                    disabled={index === 0 || isReadOnly}
+                    style={{ background: 'none', border: 'none', cursor: index === 0 ? 'default' : 'pointer', fontSize: '18px', padding: '0 4px', color: index === 0 ? '#ccc' : 'var(--primary-color)' }}
+                    title="Move Up"
+                  >
+                    ▲
+                  </button>
+                  <button 
+                    onClick={() => handleMove(cat.id, 'DOWN')} 
+                    disabled={index === sortedCategories.length - 1 || isReadOnly}
+                    style={{ background: 'none', border: 'none', cursor: index === sortedCategories.length - 1 ? 'default' : 'pointer', fontSize: '18px', padding: '0 4px', color: index === sortedCategories.length - 1 ? '#ccc' : 'var(--primary-color)' }}
+                    title="Move Down"
+                  >
+                    ▼
+                  </button>
+                </div>
+              </td>
               <td style={{ padding: '12px 8px', fontWeight: '500' }}>{cat.name}</td>
               <td style={{ padding: '12px 8px' }}>
                 <span style={{ 
@@ -119,10 +153,10 @@ const CategoryManagement = () => {
                 </span>
               </td>
               <td style={{ padding: '12px 8px', textAlign: 'right' }}>
-                <button onClick={() => handleEdit(cat)} className="btn-secondary" style={{ padding: '4px 12px', marginRight: '8px', fontSize: '13px' }}>
+                <button onClick={() => handleEdit(cat)} className="btn-secondary" disabled={isReadOnly} style={{ padding: '4px 12px', marginRight: '8px', fontSize: '13px' }}>
                   Edit
                 </button>
-                <button onClick={() => handleDelete(cat.id)} className="btn-danger" style={{ padding: '4px 12px', fontSize: '13px' }}>
+                <button onClick={() => handleDelete(cat.id)} className="btn-danger" disabled={isReadOnly} style={{ padding: '4px 12px', fontSize: '13px' }}>
                   Delete
                 </button>
               </td>
@@ -130,7 +164,7 @@ const CategoryManagement = () => {
           ))}
           {categories.length === 0 && (
             <tr>
-              <td colSpan="3" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
+              <td colSpan="4" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
                 No categories found.
               </td>
             </tr>

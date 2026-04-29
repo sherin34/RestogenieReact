@@ -114,16 +114,41 @@ const QRPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [branding, setBranding] = useState({
+    primaryColor: '#007BFF',
+    instagramUrl: '',
+    whatsappNumber: '',
+    welcomeMessage: '',
+    logoUrl: null,
+    bannerUrl: null,
+    useDefaultBanner: true
+  });
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [orderNotes, setOrderNotes] = useState('');
-
-  // Confirm modal state
   const [showConfirm, setShowConfirm] = useState(false);
-
-  // Order tracking state
-  const [trackedOrder, setTrackedOrder] = useState(null); // holds the order after placement
+  const [trackedOrder, setTrackedOrder] = useState(null);
   const [showOrderTracker, setShowOrderTracker] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const pollingRef = useRef(null);
+
+  const bannerSource = branding.useDefaultBanner 
+    ? '/default-banner.png' 
+    : (branding.bannerUrl ? `${import.meta.env.VITE_IMAGE_BASE_URL || 'http://localhost:8080'}${branding.bannerUrl}` : '/default-banner.png');
+
+  const filteredMenuItems = menuItems
+    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+    .map(cat => ({
+      ...cat,
+      items: cat.items?.filter(item => 
+        (item.isAvailable !== false) && 
+        (item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+         item.description?.toLowerCase().includes(searchQuery.toLowerCase()))
+      ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+    }))
+    .filter(cat => 
+      (selectedCategory === 'All' || cat.categoryName === selectedCategory) && 
+      (cat.items && cat.items.length > 0)
+    );
 
   const handleAddToCart = (item) => {
     setCartItems((prevCart) => {
@@ -152,12 +177,10 @@ const QRPage = () => {
   const totalBill = cartItems.reduce((sum, item) => sum + (parseFloat(item.price) * item.quantity), 0);
 
   const startPolling = (orderId) => {
-    // Poll every 5 seconds
     pollingRef.current = setInterval(async () => {
       try {
         const res = await api.get(`/qr/order/${orderId}/status`);
         setTrackedOrder(res.data);
-        // Stop polling if order is ready or completed
         if (res.data.status === 'READY' || res.data.status === 'COMPLETED' || res.data.status === 'CANCELLED') {
           clearInterval(pollingRef.current);
         }
@@ -177,7 +200,6 @@ const QRPage = () => {
     setShowConfirm(false);
     try {
       setIsPlacingOrder(true);
-
       const orderPayload = {
         items: cartItems.map(i => ({
           menuItemId: i.id || i.menuItemId || i.itemId,
@@ -185,18 +207,13 @@ const QRPage = () => {
         })),
         notes: orderNotes
       };
-
       const res = await api.post(`/qr/${tableId}/order`, orderPayload);
-
       setCartItems([]);
       setOrderNotes('');
       setTrackedOrder(res.data);
       setShowOrderTracker(true);
       showToast('Order placed successfully!', 'success');
-
-      // Start polling for status updates
       startPolling(res.data.orderId);
-
     } catch (err) {
       console.error('Failed to place order:', err);
       showToast('Failed to place your order. Please try again.', 'error');
@@ -213,6 +230,13 @@ const QRPage = () => {
         const name = response.data.restaurantName || 'Restaurant';
         setRestaurantName(name);
         document.title = `${name} - Digital Menu`;
+        if (response.data.branding) {
+          const b = response.data.branding;
+          setBranding(b);
+          if (b.primaryColor) {
+            document.documentElement.style.setProperty('--primary-color', b.primaryColor);
+          }
+        }
       } catch (err) {
         console.error('Failed to load menu:', err);
         setError('Could not load the menu. Please try again later.');
@@ -220,10 +244,7 @@ const QRPage = () => {
         setLoading(false);
       }
     };
-
-    if (tableId) {
-      fetchMenu();
-    }
+    if (tableId) fetchMenu();
   }, [tableId]);
 
   const currentStepIndex = trackedOrder
@@ -231,393 +252,553 @@ const QRPage = () => {
     : -1;
 
   return (
-    <div className="container" style={{ paddingBottom: cartItems.length > 0 ? '120px' : '20px' }}>
+    <div style={{ 
+      minHeight: '100vh', 
+      backgroundColor: '#f8fafc', 
+      paddingBottom: cartItems.length > 0 ? '140px' : '40px',
+      fontFamily: "'Inter', sans-serif"
+    }}>
+      {/* ── Dynamic Header with Banner ── */}
       <header style={{ 
-        padding: '24px 20px', 
+        height: '320px',
         textAlign: 'center', 
-        background: 'linear-gradient(135deg, var(--primary-color) 0%, #6366f1 100%)',
-        color: 'white',
-        borderRadius: '0 0 24px 24px',
-        marginBottom: '24px',
-        boxShadow: 'var(--shadow-md)'
+        position: 'relative',
+        zIndex: 10,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'flex-end',
+        paddingBottom: '40px'
       }}>
-        <h1 style={{ margin: '0 0 8px 0', fontSize: '28px', fontWeight: '800', letterSpacing: '-0.5px' }}>{restaurantName}</h1>
-        <div style={{ 
-          display: 'inline-flex', 
-          alignItems: 'center',
-          gap: '6px',
-          padding: '6px 16px', 
-          backgroundColor: 'rgba(255, 255, 255, 0.2)', 
-          backdropFilter: 'blur(8px)',
-          color: 'white', 
-          borderRadius: '20px', 
-          fontSize: '14px', 
-          fontWeight: '600',
-          border: '1px solid rgba(255, 255, 255, 0.3)'
-        }}>
-           <span style={{ opacity: 0.8 }}>Dining at</span> Table {tableId}
+        {/* Banner Background */}
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.8) 100%), url(${bannerSource})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          borderRadius: '0 0 40px 40px',
+          zIndex: -1,
+          boxShadow: '0 10px 30px rgba(0,0,0,0.1)'
+        }} />
+
+        <div style={{ position: 'relative', zIndex: 1, color: 'white' }}>
+          {branding.logoUrl ? (
+            <img 
+              src={`${import.meta.env.VITE_IMAGE_BASE_URL || 'http://localhost:8080'}${branding.logoUrl}`} 
+              alt={restaurantName}
+              style={{ width: '90px', height: '90px', borderRadius: '24px', backgroundColor: 'white', padding: '10px', marginBottom: '16px', boxShadow: '0 8px 20px rgba(0,0,0,0.3)' }}
+            />
+          ) : (
+            <div style={{ fontSize: '56px', marginBottom: '12px' }}>🍽️</div>
+          )}
+          
+          <h1 style={{ margin: '0 0 6px 0', fontSize: '32px', fontWeight: '900', letterSpacing: '-1px' }}>{restaurantName}</h1>
+          
+          {branding.welcomeMessage && (
+            <p style={{ margin: '0 0 20px 0', opacity: 0.9, fontSize: '15px', fontWeight: '500', maxWidth: '320px', marginLeft: 'auto', marginRight: 'auto', lineHeight: '1.4' }}>
+              {branding.welcomeMessage}
+            </p>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '14px' }}>
+            <div style={{ 
+              display: 'inline-flex', 
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 20px', 
+              backgroundColor: 'rgba(255, 255, 255, 0.15)', 
+              backdropFilter: 'blur(12px)',
+              color: 'white', 
+              borderRadius: '30px', 
+              fontSize: '14px', 
+              fontWeight: '800',
+              border: '1px solid rgba(255, 255, 255, 0.25)'
+            }}>
+               <span style={{ opacity: 0.7, fontWeight: '500' }}>Table</span> {tableId}
+            </div>
+
+            {branding.instagramUrl && (
+              <a href={branding.instagramUrl} target="_blank" rel="noopener noreferrer" style={{
+                width: '38px', height: '38px', borderRadius: '50%', backgroundColor: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+              }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#E4405F' }}>
+                  <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                  <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                  <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+                </svg>
+              </a>
+            )}
+
+            {branding.whatsappNumber && (
+              <a href={`https://wa.me/${branding.whatsappNumber.replace(/\+/g, '')}`} target="_blank" rel="noopener noreferrer" style={{
+                width: '38px', height: '38px', borderRadius: '50%', backgroundColor: '#25D366', display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+              }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"></path>
+                </svg>
+              </a>
+            )}
+          </div>
         </div>
       </header>
 
-      {loading ? (
-        <p style={{ textAlign: 'center', padding: '20px' }}>Loading menu...</p>
-      ) : error ? (
-        <p style={{ color: 'red', textAlign: 'center' }}>{error}</p>
-      ) : menuItems.length === 0 ? (
-        <p style={{ textAlign: 'center' }}>No menu items available right now.</p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          {/* Category Selector Tabs */}
-          <div style={{
-            display: 'flex',
-            gap: '10px',
-            overflowX: 'auto',
-            paddingBottom: '16px',
-            marginBottom: '10px',
-            scrollbarWidth: 'none',
-            msOverflowStyle: 'none'
-          }}>
-            <button
-              onClick={() => setSelectedCategory('All')}
-              style={{
-                padding: '8px 20px',
-                borderRadius: '20px',
-                border: '1px solid var(--primary-color)',
-                backgroundColor: selectedCategory === 'All' ? 'var(--primary-color)' : 'transparent',
-                color: selectedCategory === 'All' ? 'white' : 'var(--primary-color)',
-                fontWeight: '600',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                transition: 'all 0.2s'
-              }}
-            >
-              All
-            </button>
-            {menuItems.map((cat, idx) => (
+      <div className="container" style={{ position: 'relative', zIndex: 20 }}>
+        <div style={{ 
+          margin: '0 auto 20px', 
+          maxWidth: '600px',
+          backgroundColor: 'white',
+          borderRadius: '16px',
+          padding: '4px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.05)',
+          border: '1px solid #f1f5f9'
+        }}>
+          <span style={{ fontSize: '20px' }}>🔍</span>
+          <input 
+            type="text" 
+            placeholder="Search for dishes..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ 
+              border: 'none', 
+              padding: '14px 0', 
+              fontSize: '16px', 
+              width: '100%', 
+              outline: 'none',
+              backgroundColor: 'transparent'
+            }}
+          />
+          {searchQuery && (
+            <button 
+              onClick={() => setSearchQuery('')}
+              style={{ background: 'none', padding: '8px', fontSize: '18px', color: '#cbd5e1' }}
+            >✕</button>
+          )}
+        </div>
+
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '60px' }}>
+            <div className="shimmer" style={{ width: '100%', height: '200px', borderRadius: '20px', marginBottom: '20px' }}></div>
+            <div className="shimmer" style={{ width: '80%', height: '24px', borderRadius: '4px', margin: '0 auto 12px' }}></div>
+            <p style={{ color: '#94a3b8', fontWeight: '500' }}>Fetching delicious menu...</p>
+          </div>
+        ) : error ? (
+          <div style={{ textAlign: 'center', padding: '40px', backgroundColor: '#fef2f2', borderRadius: '16px', color: '#991b1b' }}>
+            <p style={{ fontSize: '18px', fontWeight: '600' }}>{error}</p>
+          </div>
+        ) : (
+          <>
+            <div style={{
+              position: 'sticky',
+              top: '10px',
+              zIndex: 100,
+              display: 'flex',
+              gap: '10px',
+              overflowX: 'auto',
+              padding: '8px 4px 16px',
+              margin: '0 -16px 20px',
+              paddingLeft: '16px',
+              paddingRight: '16px',
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none'
+            }} className="hide-scrollbar">
               <button
-                key={idx}
-                onClick={() => setSelectedCategory(cat.categoryName)}
+                onClick={() => setSelectedCategory('All')}
                 style={{
-                  padding: '8px 20px',
-                  borderRadius: '20px',
-                  border: '1px solid var(--primary-color)',
-                  backgroundColor: selectedCategory === cat.categoryName ? 'var(--primary-color)' : 'transparent',
-                  color: selectedCategory === cat.categoryName ? 'white' : 'var(--primary-color)',
-                  fontWeight: '600',
+                  padding: '10px 24px',
+                  borderRadius: '25px',
+                  border: 'none',
+                  backgroundColor: selectedCategory === 'All' ? 'var(--primary-color)' : 'white',
+                  color: selectedCategory === 'All' ? 'white' : '#64748b',
+                  fontWeight: '700',
+                  fontSize: '14px',
                   cursor: 'pointer',
                   whiteSpace: 'nowrap',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
                   transition: 'all 0.2s'
                 }}
               >
-                {cat.categoryName}
+                All Items
               </button>
-            ))}
-          </div>
+              {menuItems.map((cat, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setSelectedCategory(cat.categoryName)}
+                  style={{
+                    padding: '10px 24px',
+                    borderRadius: '25px',
+                    border: 'none',
+                    backgroundColor: selectedCategory === cat.categoryName ? 'var(--primary-color)' : 'white',
+                    color: selectedCategory === cat.categoryName ? 'white' : '#64748b',
+                    fontWeight: '700',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  {cat.categoryName}
+                </button>
+              ))}
+            </div>
 
-          {menuItems
-            .filter(cat => selectedCategory === 'All' || cat.categoryName === selectedCategory)
-            .map((category, catIdx) => (
-              <div key={catIdx}>
-                <h2 style={{ fontSize: '20px', borderBottom: '2px solid #007BFF', paddingBottom: '8px', marginBottom: '12px' }}>
-                  {category.categoryName}
-                </h2>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {category.items && category.items.map((item) => (
-                    <div
-                      key={item.id}
-                      className="card"
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '16px',
-                      }}
-                    >
-                      <div style={{ display: 'flex', gap: '16px', flex: 1 }}>
-                        {item.imageUrl && (
-                          <img
-                            src={`${import.meta.env.VITE_IMAGE_BASE_URL || 'http://localhost:8080'}${item.imageUrl}`}
-                            alt={item.name}
-                            style={{ width: '80px', height: '80px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0 }}
-                          />
-                        )}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
-                          <strong style={{ fontSize: '18px', margin: 0 }}>{item.name}</strong>
-                          {item.description && <p style={{ margin: 0, fontSize: '13px', color: '#666', lineHeight: '1.4' }}>{item.description}</p>}
-                          <span style={{ color: 'var(--success-color)', fontWeight: 'bold', fontSize: '16px', marginTop: '4px' }}>₹{parseFloat(item.price).toFixed(2)}</span>
-                        </div>
-                      </div>
-
-                      {/* Per-item: show qty controls if in cart, else Add button */}
-                      {(() => {
-                        const cartItem = cartItems.find(ci => ci.id === item.id);
-                        if (cartItem) {
-                          return (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '12px', flexShrink: 0 }}>
-                              <button
-                                onClick={() => updateCartQuantity(item.id, -1)}
-                                style={{
-                                  width: '34px', height: '34px', borderRadius: '50%',
-                                  backgroundColor: 'var(--bg-secondary)',
-                                  border: '1px solid var(--border-color)',
-                                  fontSize: '18px', fontWeight: '700', cursor: 'pointer',
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                }}
-                              >−</button>
-                              <span style={{ minWidth: '22px', textAlign: 'center', fontWeight: '700', fontSize: '16px' }}>
-                                {cartItem.quantity}
-                              </span>
-                              <button
-                                onClick={() => updateCartQuantity(item.id, 1)}
-                                style={{
-                                  width: '34px', height: '34px', borderRadius: '50%',
-                                  backgroundColor: 'var(--primary-color)',
-                                  border: 'none', color: 'white',
-                                  fontSize: '18px', fontWeight: '700', cursor: 'pointer',
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                }}
-                              >+</button>
-                            </div>
-                          );
-                        }
-                        return (
-                          <button
-                            className="btn-primary"
-                            onClick={() => handleAddToCart(item)}
-                            style={{ padding: '10px 22px', fontSize: '15px', borderRadius: '8px', marginLeft: '12px', flexShrink: 0 }}
-                          >
-                            Add
-                          </button>
-                        );
-                      })()}
-                    </div>
-                  ))}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+              {filteredMenuItems.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+                  <div style={{ fontSize: '64px', marginBottom: '20px' }}>🥗</div>
+                  <h3 style={{ fontSize: '20px', color: '#475569', marginBottom: '8px' }}>No items found</h3>
+                  <p style={{ color: '#94a3b8' }}>Try searching for something else!</p>
                 </div>
+              ) : (
+                filteredMenuItems.map((category, catIdx) => (
+                  <div key={catIdx}>
+                    <h2 style={{ 
+                      fontSize: '22px', 
+                      fontWeight: '800', 
+                      marginBottom: '20px', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '12px',
+                      color: '#1e293b'
+                    }}>
+                      <span style={{ width: '4px', height: '24px', backgroundColor: 'var(--primary-color)', borderRadius: '2px' }}></span>
+                      {category.categoryName}
+                      <span style={{ fontSize: '14px', fontWeight: '500', color: '#94a3b8', marginLeft: 'auto' }}>
+                        {category.items?.length} items
+                      </span>
+                    </h2>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
+                      {category.items && category.items.map((item) => (
+                        <div
+                          key={item.id}
+                          style={{
+                            display: 'flex',
+                            backgroundColor: 'white',
+                            borderRadius: '24px',
+                            padding: '16px',
+                            gap: '16px',
+                            boxShadow: '0 10px 20px rgba(0,0,0,0.02)',
+                            border: '1px solid #f1f5f9',
+                            transition: 'transform 0.2s',
+                            position: 'relative',
+                            overflow: 'hidden'
+                          }}
+                        >
+                          <div style={{ width: '100px', height: '100px', borderRadius: '18px', overflow: 'hidden', flexShrink: 0, backgroundColor: '#f1f5f9' }}>
+                            {item.imageUrl ? (
+                              <img
+                                src={`${import.meta.env.VITE_IMAGE_BASE_URL || 'http://localhost:8080'}${item.imageUrl}`}
+                                alt={item.name}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              />
+                            ) : (
+                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px' }}>🍲</div>
+                            )}
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, justifyContent: 'center' }}>
+                            <h3 style={{ margin: '0 0 4px 0', fontSize: '17px', fontWeight: '700', color: '#1e293b' }}>{item.name}</h3>
+                            {item.description && (
+                              <p style={{ 
+                                margin: '0 0 10px 0', 
+                                fontSize: '13px', 
+                                color: '#64748b', 
+                                lineHeight: '1.4',
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                                overflow: 'hidden'
+                              }}>
+                                {item.description}
+                              </p>
+                            )}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
+                              <span style={{ color: 'var(--primary-color)', fontWeight: '800', fontSize: '18px' }}>₹{parseFloat(item.price).toFixed(2)}</span>
+                              
+                              {(() => {
+                                const cartItem = cartItems.find(ci => ci.id === item.id);
+                                if (cartItem) {
+                                  return (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: '#f1f5f9', padding: '4px', borderRadius: '30px' }}>
+                                      <button
+                                        onClick={() => updateCartQuantity(item.id, -1)}
+                                        style={{
+                                          width: '32px', height: '32px', borderRadius: '50%',
+                                          backgroundColor: 'white', border: 'none',
+                                          fontSize: '18px', fontWeight: '700', cursor: 'pointer',
+                                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                          boxShadow: '0 2px 5px rgba(0,0,0,0.05)'
+                                        }}
+                                      >−</button>
+                                      <span style={{ minWidth: '24px', textAlign: 'center', fontWeight: '800', fontSize: '15px' }}>
+                                        {cartItem.quantity}
+                                      </span>
+                                      <button
+                                        onClick={() => updateCartQuantity(item.id, 1)}
+                                        style={{
+                                          width: '32px', height: '32px', borderRadius: '50%',
+                                          backgroundColor: 'var(--primary-color)',
+                                          border: 'none', color: 'white',
+                                          fontSize: '18px', fontWeight: '700', cursor: 'pointer',
+                                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                          boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+                                        }}
+                                      >+</button>
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <button
+                                    className="btn-primary"
+                                    onClick={() => handleAddToCart(item)}
+                                    style={{ 
+                                      padding: '8px 24px', 
+                                      fontSize: '14px', 
+                                      borderRadius: '30px', 
+                                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                                      border: 'none'
+                                    }}
+                                  >
+                                    Add
+                                  </button>
+                                );
+                              })()}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      {cartItems.length > 0 && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          left: '16px',
+          right: '16px',
+          zIndex: 200,
+          maxWidth: '600px',
+          margin: '0 auto'
+        }}>
+          <div
+            onClick={() => setShowConfirm(true)}
+            style={{
+              backgroundColor: 'var(--primary-color)',
+              padding: '16px 24px',
+              borderRadius: '24px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              boxShadow: '0 12px 40px rgba(0,0,0,0.2)',
+              cursor: 'pointer',
+              color: 'white',
+              transition: 'transform 0.2s active'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                backgroundColor: 'rgba(255,255,255,0.2)',
+                padding: '6px 12px',
+                borderRadius: '12px',
+                fontSize: '14px',
+                fontWeight: '800'
+              }}>
+                {cartItems.reduce((a, i) => a + i.quantity, 0)} Items
               </div>
-            ))}
+              <span style={{ fontWeight: '700', fontSize: '16px' }}>View Cart</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ fontWeight: '800', fontSize: '20px' }}>₹{totalBill.toFixed(2)}</span>
+              <span style={{ fontSize: '18px' }}>→</span>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Sticky Cart Panel */}
-      {cartItems.length > 0 && (
-        <CartPanel
-          cartItems={cartItems}
-          totalBill={totalBill}
-          updateCartQuantity={updateCartQuantity}
-          removeFromCart={removeFromCart}
-          isPlacingOrder={isPlacingOrder}
-          onPlaceOrder={() => setShowConfirm(true)}
-        />
-      )}
-
-      {/* ── Confirm Order Modal ── */}
       {showConfirm && (
         <div style={{
-          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '20px'
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 1000,
+          backdropFilter: 'blur(4px)'
         }}>
-          <div className="card" style={{ maxWidth: '440px', width: '100%', padding: '32px', borderRadius: '16px' }}>
-            <h2 style={{ margin: '0 0 8px 0', fontSize: '22px' }}>Confirm Order</h2>
-            <p style={{ margin: '0 0 20px 0', color: 'var(--text-secondary)' }}>
-              You are about to place an order with <strong>{cartItems.reduce((a, i) => a + i.quantity, 0)} items</strong> totalling <strong>₹{totalBill.toFixed(2)}</strong>.
-            </p>
-            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px', marginBottom: '20px' }}>
-              <div style={{ marginBottom: '16px' }}>
-                {cartItems.map(ci => (
-                  <div key={ci.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '6px' }}>
-                    <span>{ci.name} × {ci.quantity}</span>
-                    <span>₹{(parseFloat(ci.price) * ci.quantity).toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
+          <div style={{ 
+            backgroundColor: 'white', 
+            width: '100%', 
+            maxWidth: '600px', 
+            padding: '32px 24px 40px', 
+            borderRadius: '32px 32px 0 0',
+            maxHeight: '90vh',
+            overflowY: 'auto'
+          }}>
+            <div style={{ width: '40px', height: '4px', backgroundColor: '#e2e8f0', borderRadius: '2px', margin: '0 auto 24px' }}></div>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: 'var(--text-secondary)', marginBottom: '8px' }}>SPECIAL INSTRUCTIONS (OPTIONAL)</label>
-                <textarea 
-                  placeholder="e.g. less spicy, no onion..." 
-                  value={orderNotes}
-                  onChange={(e) => setOrderNotes(e.target.value)}
-                  style={{ 
-                    width: '100%', padding: '12px', borderRadius: '10px', 
-                    border: '1px solid var(--border-color)', fontSize: '14px', 
-                    minHeight: '80px', resize: 'none', backgroundColor: 'var(--bg-secondary)'
-                  }}
-                />
+                <h2 style={{ margin: '0 0 4px 0', fontSize: '24px', fontWeight: '800', color: '#1e293b' }}>Confirm Order</h2>
+                <p style={{ margin: 0, color: '#64748b', fontSize: '14px' }}>Review your items before placing the order</p>
+              </div>
+              <button 
+                onClick={() => setShowConfirm(false)}
+                style={{ background: '#f1f5f9', width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', color: '#64748b' }}
+              >✕</button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '32px' }}>
+              {cartItems.map(ci => (
+                <div key={ci.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: '700', fontSize: '16px', color: '#1e293b' }}>{ci.name}</div>
+                    <div style={{ fontSize: '13px', color: '#64748b' }}>₹{parseFloat(ci.price).toFixed(2)} × {ci.quantity}</div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ fontWeight: '800', fontSize: '16px', color: '#1e293b' }}>₹{(parseFloat(ci.price) * ci.quantity).toFixed(2)}</div>
+                    <button 
+                      onClick={() => removeFromCart(ci.id)}
+                      style={{ background: 'none', color: '#ef4444', padding: '4px', fontSize: '18px' }}
+                    >🗑️</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ marginBottom: '32px' }}>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '800', color: '#1e293b', marginBottom: '8px' }}>SPECIAL INSTRUCTIONS</label>
+              <textarea 
+                placeholder="e.g. less spicy, no onion..." 
+                value={orderNotes}
+                onChange={(e) => setOrderNotes(e.target.value)}
+                style={{ 
+                  width: '100%', padding: '16px', borderRadius: '16px', 
+                  border: '1px solid #e2e8f0', fontSize: '15px', 
+                  minHeight: '100px', resize: 'none', backgroundColor: '#f8fafc',
+                  outline: 'none', transition: 'border-color 0.2s'
+                }}
+              />
+            </div>
+
+            <div style={{ borderTop: '2px dashed #f1f5f9', paddingTop: '24px', marginBottom: '32px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '18px', fontWeight: '600', color: '#64748b' }}>Total Bill</span>
+                <span style={{ fontSize: '32px', fontWeight: '900', color: 'var(--primary-color)' }}>₹{totalBill.toFixed(2)}</span>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button
-                className="btn-secondary"
-                onClick={() => setShowConfirm(false)}
-                style={{ flex: 1, padding: '14px', fontSize: '16px', borderRadius: '10px' }}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn-success"
-                onClick={handlePlaceOrder}
-                style={{ flex: 1, padding: '14px', fontSize: '16px', borderRadius: '10px' }}
-              >
-                Confirm Order
-              </button>
-            </div>
+
+            <button
+              className="btn-primary"
+              onClick={handlePlaceOrder}
+              disabled={isPlacingOrder}
+              style={{ 
+                width: '100%', 
+                padding: '18px', 
+                fontSize: '18px', 
+                borderRadius: '20px', 
+                fontWeight: '800',
+                boxShadow: '0 12px 25px rgba(0,0,0,0.1)'
+              }}
+            >
+              {isPlacingOrder ? 'Placing Order...' : 'Confirm Order'}
+            </button>
           </div>
         </div>
       )}
 
-      {/* ── Order Status Tracker Modal ── */}
       {showOrderTracker && trackedOrder && (
         <div style={{
           position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '20px'
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px'
         }}>
-          <div className="card" style={{ maxWidth: '480px', width: '100%', padding: '32px', borderRadius: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+          <div style={{ backgroundColor: 'white', maxWidth: '480px', width: '100%', padding: '32px', borderRadius: '32px', boxShadow: '0 20px 50px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
               <div>
-                <h2 style={{ margin: '0 0 4px 0', fontSize: '22px' }}>Order #{trackedOrder.orderId}</h2>
-                <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '14px' }}>
-                  Table: {trackedOrder.tableName} · ₹{trackedOrder.totalAmount?.toFixed(2)}
+                <h2 style={{ margin: '0 0 4px 0', fontSize: '24px', fontWeight: '800' }}>Order #{trackedOrder.orderId}</h2>
+                <p style={{ margin: 0, color: '#64748b', fontSize: '14px' }}>
+                  Dining at Table {trackedOrder.tableName}
                 </p>
               </div>
               <button
                 onClick={() => { setShowOrderTracker(false); clearInterval(pollingRef.current); }}
-                style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: 'var(--text-secondary)', lineHeight: 1 }}
+                style={{ background: '#f1f5f9', border: 'none', width: '36px', height: '36px', borderRadius: '50%', cursor: 'pointer', color: '#64748b' }}
               >
                 ×
               </button>
             </div>
 
-            {/* Status Progress */}
-            <div style={{ position: 'relative', marginBottom: '32px' }}>
-              {/* Progress line */}
-              <div style={{
-                position: 'absolute',
-                top: '22px',
-                left: '22px',
-                right: '22px',
-                height: '4px',
-                backgroundColor: 'var(--border-color)',
-                borderRadius: '2px',
-                zIndex: 0
-              }} />
-              <div style={{
-                position: 'absolute',
-                top: '22px',
-                left: '22px',
-                height: '4px',
-                width: currentStepIndex >= 0 ? `${(currentStepIndex / (STATUS_STEPS.length - 1)) * 100}%` : '0%',
-                backgroundColor: 'var(--success-color)',
-                borderRadius: '2px',
-                zIndex: 1,
-                transition: 'width 0.6s ease'
-              }} />
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative', zIndex: 2 }}>
-                {STATUS_STEPS.map((step, idx) => {
-                  const isDone = currentStepIndex >= idx;
-                  const isCurrent = currentStepIndex === idx;
-                  return (
-                    <div key={step.key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
-                      <div style={{
-                        width: '44px',
-                        height: '44px',
-                        borderRadius: '50%',
-                        backgroundColor: isDone ? 'var(--success-color)' : 'var(--bg-secondary)',
-                        border: `3px solid ${isDone ? 'var(--success-color)' : 'var(--border-color)'}`,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '20px',
-                        transition: 'all 0.4s ease',
-                        boxShadow: isCurrent ? '0 0 0 4px rgba(34,197,94,0.25)' : 'none'
-                      }}>
-                        {step.icon}
-                      </div>
-                      <span style={{
-                        fontSize: '11px',
-                        fontWeight: isCurrent ? '700' : '500',
-                        color: isDone ? 'var(--success-color)' : 'var(--text-secondary)',
-                        marginTop: '8px',
-                        textAlign: 'center',
-                        lineHeight: '1.3'
-                      }}>
-                        {step.label}
-                      </span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '32px' }}>
+              {STATUS_STEPS.map((step, idx) => {
+                const isDone = currentStepIndex >= idx;
+                const isCurrent = currentStepIndex === idx;
+                return (
+                  <div key={step.key} style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{
+                      width: '40px', height: '40px', borderRadius: '12px',
+                      backgroundColor: isDone ? 'var(--success-color)' : '#f1f5f9',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '20px', transition: 'all 0.4s'
+                    }}>
+                      {isDone ? '✓' : step.icon}
                     </div>
-                  );
-                })}
-              </div>
+                    <div>
+                      <div style={{ fontWeight: '700', fontSize: '15px', color: isDone ? '#1e293b' : '#94a3b8' }}>{step.label}</div>
+                      {isCurrent && <div style={{ fontSize: '12px', color: 'var(--success-color)', fontWeight: '600' }}>In Progress...</div>}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
-            {/* Current status message */}
-            {currentStepIndex >= 0 && (
-              <div style={{
-                backgroundColor: 'var(--bg-secondary)',
-                borderRadius: '10px',
-                padding: '14px 16px',
-                textAlign: 'center',
-                marginBottom: '20px'
-              }}>
-                <span style={{ fontSize: '15px', fontWeight: '600', color: 'var(--success-color)' }}>
-                  {STATUS_STEPS[currentStepIndex]?.description}
-                </span>
-                {trackedOrder.status !== 'READY' && trackedOrder.status !== 'COMPLETED' && (
-                  <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    Refreshing automatically…
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Order items */}
-            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
-              <p style={{ margin: '0 0 10px 0', fontWeight: '600', fontSize: '14px' }}>Your Items</p>
-              {trackedOrder.items?.map(item => (
-                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px', color: 'var(--text-secondary)' }}>
-                  <span>{item.menuItemName} × {item.quantity}</span>
-                  <span>₹{item.totalPrice?.toFixed(2)}</span>
-                </div>
-              ))}
-            </div>
+            <button 
+              onClick={() => setShowOrderTracker(false)}
+              className="btn-primary" 
+              style={{ width: '100%', padding: '14px', borderRadius: '16px' }}
+            >
+              Continue Browsing
+            </button>
           </div>
         </div>
       )}
 
-      {/* Button to re-open tracker */}
       {!showOrderTracker && trackedOrder && (
         <button
           onClick={() => setShowOrderTracker(true)}
           style={{
-            position: 'fixed',
-            bottom: '80px',
-            right: '20px',
-            padding: '12px 20px',
-            borderRadius: '30px',
-            backgroundColor: 'var(--success-color)',
-            color: 'white',
-            border: 'none',
-            fontWeight: '700',
-            fontSize: '14px',
-            cursor: 'pointer',
-            boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
-            zIndex: 50
+            position: 'fixed', bottom: '100px', right: '20px', padding: '12px 24px',
+            borderRadius: '30px', backgroundColor: '#1e293b', color: 'white',
+            border: 'none', fontWeight: '700', fontSize: '14px', cursor: 'pointer',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.2)', zIndex: 50, display: 'flex', alignItems: 'center', gap: '8px'
           }}
         >
-          📋 Track Order
+          📋 Status: {trackedOrder.status}
         </button>
       )}
 
-      {/* Guest Footer */}
-      <footer style={{
-        marginTop: '60px',
-        padding: '40px 20px 20px',
-        textAlign: 'center',
-        color: 'var(--text-secondary)',
-        fontSize: '13px',
-        borderTop: '1px solid var(--border-color)'
-      }}>
+      <footer style={{ marginTop: '60px', padding: '40px 20px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>
         <p style={{ margin: 0 }}>&copy; {new Date().getFullYear()} <strong>{restaurantName}</strong></p>
-        <p style={{ marginTop: '8px', opacity: 0.6 }}>Powered by RestoGenie</p>
+        <p style={{ marginTop: '8px', opacity: 0.6 }}>Experience by RestoGenie</p>
       </footer>
+
+      <style>{`
+        .shimmer {
+          background: linear-gradient(90deg, #f1f5f9 25%, #f8fafc 50%, #f1f5f9 75%);
+          background-size: 200% 100%;
+          animation: shimmer 1.5s infinite;
+        }
+        @keyframes shimmer {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      `}</style>
     </div>
   );
 };

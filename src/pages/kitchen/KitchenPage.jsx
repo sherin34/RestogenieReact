@@ -196,30 +196,32 @@ const KitchenPage = () => {
   return (
     <div className="container" style={{ maxWidth: '1200px' }}>
       {/* KDS Header with Hotkey Controls */}
-      <div className="desktop-only" style={{ display: 'flex', justifyContent: 'flex-end', gap: '24px', alignItems: 'center', marginBottom: '16px', padding: '10px 0', borderBottom: '1px solid var(--border-color)' }}>
-        <div style={{ display: 'flex', gap: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-          <span style={{ fontWeight: '700', padding: '2px 6px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}>1-9</span> Select
-          <span style={{ fontWeight: '700', padding: '2px 6px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}>P</span> Preparing
-          <span style={{ fontWeight: '700', padding: '2px 6px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}>R</span> Ready
-          <span style={{ fontWeight: '700', padding: '2px 6px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}>H</span> History
-        </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', userSelect: 'none' }}>
-          <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>HOTKEYS</span>
-          <div 
-            onClick={() => setShowHotkeys(!showHotkeys)}
-            style={{
-              width: '36px', height: '18px', borderRadius: '9px',
-              backgroundColor: showHotkeys ? 'var(--primary-color)' : '#ccc',
-              position: 'relative', transition: 'background-color 0.2s'
-            }}
-          >
-            <div style={{
-              width: '14px', height: '14px', borderRadius: '50%', backgroundColor: 'white',
-              position: 'absolute', top: '2px', left: showHotkeys ? '20px' : '2px',
-              transition: 'left 0.2s'
-            }} />
+      <div className="desktop-only">
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '24px', alignItems: 'center', marginBottom: '16px', padding: '10px 0', borderBottom: '1px solid var(--border-color)', width: '100%' }}>
+          <div style={{ display: 'flex', gap: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+            <span style={{ fontWeight: '700', padding: '2px 6px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}>1-9</span> Select
+            <span style={{ fontWeight: '700', padding: '2px 6px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}>P</span> Preparing
+            <span style={{ fontWeight: '700', padding: '2px 6px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}>R</span> Ready
+            <span style={{ fontWeight: '700', padding: '2px 6px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}>H</span> History
           </div>
-        </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', userSelect: 'none' }}>
+            <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>HOTKEYS</span>
+            <div 
+              onClick={() => setShowHotkeys(!showHotkeys)}
+              style={{
+                width: '36px', height: '18px', borderRadius: '9px',
+                backgroundColor: showHotkeys ? 'var(--primary-color)' : '#ccc',
+                position: 'relative', transition: 'background-color 0.2s'
+              }}
+            >
+              <div style={{
+                width: '14px', height: '14px', borderRadius: '50%', backgroundColor: 'white',
+                position: 'absolute', top: '2px', left: showHotkeys ? '20px' : '2px',
+                transition: 'left 0.2s'
+              }} />
+            </div>
+          </label>
+        </div>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
@@ -238,7 +240,7 @@ const KitchenPage = () => {
             🕒 Order History
           </button>
           {showHotkeys && (
-            <span style={{ position: 'absolute', top: '-8px', right: '-8px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>H</span>
+            <span className="desktop-only" style={{ position: 'absolute', top: '-8px', right: '-8px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>H</span>
           )}
         </div>
       </div>
@@ -271,7 +273,7 @@ const KitchenPage = () => {
               >
                 {/* Selection Hotkey Indicator */}
                 {showHotkeys && index < 9 && (
-                  <div style={{
+                  <div className="desktop-only" style={{
                     position: 'absolute', top: '10px', left: '-10px',
                     width: '24px', height: '24px', backgroundColor: 'black', color: 'white',
                     borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -337,7 +339,7 @@ const KitchenPage = () => {
                             Prepare
                           </button>
                           {showHotkeys && isFocused && (
-                            <span style={{ position: 'absolute', top: '-10px', right: '-5px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>P</span>
+                            <span className="desktop-only" style={{ position: 'absolute', top: '-10px', right: '-5px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>P</span>
                           )}
                         </div>
                       )}
@@ -350,7 +352,7 @@ const KitchenPage = () => {
                           Mark Ready
                         </button>
                         {showHotkeys && isFocused && (
-                          <span style={{ position: 'absolute', top: '-10px', right: '-5px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>R</span>
+                          <span className="desktop-only" style={{ position: 'absolute', top: '-10px', right: '-5px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>R</span>
                         )}
                       </div>
                     </>
@@ -381,7 +383,7 @@ const KitchenPage = () => {
                   Close
                 </button>
                 {showHotkeys && (
-                  <span style={{ position: 'absolute', top: '-8px', right: '-8px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>ESC</span>
+                  <span className="desktop-only" style={{ position: 'absolute', top: '-8px', right: '-8px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>ESC</span>
                 )}
               </div>
             </div>

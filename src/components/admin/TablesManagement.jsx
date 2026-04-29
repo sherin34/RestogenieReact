@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { useToast } from '../../context/ToastContext';
 import ConfirmDialog from '../common/ConfirmDialog';
+import { useOffline } from '../../hooks/useOffline';
 
 const TablesManagement = () => {
+  const { isReadOnly } = useOffline();
   const { showToast } = useToast();
   const [tables, setTables] = useState([]);
   const [formData, setFormData] = useState({ tableName: '', capacity: '' });
@@ -99,7 +101,7 @@ const TablesManagement = () => {
           />
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button type="submit" className="btn-primary" disabled={isLoading} style={{ padding: '10px 20px' }}>
+          <button type="submit" className="btn-primary" disabled={isLoading || isReadOnly} style={{ padding: '10px 20px' }}>
             {editingId ? 'Update' : 'Add Table'}
           </button>
           {editingId && (
@@ -137,10 +139,10 @@ const TablesManagement = () => {
                 </span>
               </td>
               <td style={{ padding: '12px 8px', textAlign: 'right' }}>
-                <button onClick={() => handleEdit(table)} className="btn-secondary" style={{ padding: '4px 12px', marginRight: '8px', fontSize: '13px' }}>
+                 <button onClick={() => handleEdit(table)} className="btn-secondary" disabled={isReadOnly} style={{ padding: '4px 12px', marginRight: '8px', fontSize: '13px' }}>
                   Edit
                 </button>
-                <button onClick={() => handleDelete(table.id)} className="btn-danger" style={{ padding: '4px 12px', fontSize: '13px' }}>
+                <button onClick={() => handleDelete(table.id)} className="btn-danger" disabled={isReadOnly} style={{ padding: '4px 12px', fontSize: '13px' }}>
                   Delete
                 </button>
               </td>

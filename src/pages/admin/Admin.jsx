@@ -1,28 +1,36 @@
 import React, { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import TablesManagement from '../../components/admin/TablesManagement';
 import CategoryManagement from '../../components/admin/CategoryManagement';
 import MenuItemManagement from '../../components/admin/MenuItemManagement';
 import BillingSettings from '../../components/admin/BillingSettings';
 import StaffManagement from '../../components/admin/StaffManagement';
+import SubscriptionManagement from '../../components/admin/SubscriptionManagement';
+import BrandingSettings from '../../components/admin/BrandingSettings';
 
 const Admin = () => {
-  const [activeTab, setActiveTab] = useState('billing');
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'billing');
 
   const tabs = [
     { id: 'billing', label: 'Billing Settings', icon: '🧾' },
+    { id: 'subscription', label: 'Subscription', icon: '💎' },
     { id: 'tables', label: 'Tables', icon: '🪑' },
     { id: 'categories', label: 'Categories', icon: '📁' },
     { id: 'items', label: 'Menu Items', icon: '🍔' },
     { id: 'staff', label: 'Staff Management', icon: '👥' },
+    { id: 'branding', label: 'Branding', icon: '🎨' },
   ];
 
   const renderContent = () => {
     switch (activeTab) {
       case 'billing': return <BillingSettings />;
+      case 'subscription': return <SubscriptionManagement />;
       case 'tables': return <TablesManagement />;
       case 'categories': return <CategoryManagement />;
       case 'items': return <MenuItemManagement />;
       case 'staff': return <StaffManagement />;
+      case 'branding': return <BrandingSettings />;
       default: return <BillingSettings />;
     }
   };

@@ -4,6 +4,7 @@ import api from '../../services/api';
 import { getRole } from '../../utils/auth';
 import { useToast } from '../../context/ToastContext';
 import { useOffline } from '../../hooks/useOffline';
+import { useRazorpay } from '../../hooks/useRazorpay';
 
 const CartPanel = ({ cartItems, totalBill, updateCartQuantity, isPlacingOrder, onPlaceOrder, selectedTable, expanded, setExpanded, showHotkeys }) => {
   const totalQty = cartItems.reduce((a, i) => a + i.quantity, 0);
@@ -121,7 +122,7 @@ const CartPanel = ({ cartItems, totalBill, updateCartQuantity, isPlacingOrder, o
                 {isPlacingOrder ? 'Processing...' : 'Place Order Now'}
               </button>
               {showHotkeys && (
-                <span style={{ position: 'absolute', top: '4px', right: '4px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>F4</span>
+                <span className="desktop-only" style={{ position: 'absolute', top: '4px', right: '4px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>F4</span>
               )}
             </div>
             {!selectedTable && <p style={{ color: '#ef4444', fontSize: '12px', textAlign: 'center', marginTop: '8px' }}>Please select a table to place order</p>}
@@ -142,6 +143,7 @@ const POSPage = () => {
   const [cartItems, setCartItems] = useState([]);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [cartExpanded, setCartExpanded] = useState(false);
   const [showHotkeys, setShowHotkeys] = useState(true);
   
@@ -154,11 +156,18 @@ const POSPage = () => {
     getCachedData 
   } = useOffline();
   
+  const { handlePayment, loading: paymentLoading } = useRazorpay();
+  
   // Online Order Details
   const [onlineDetails, setOnlineDetails] = useState({
     customerName: '',
     customerPhone: '',
     notes: ''
+  });
+
+  // Branding for POS session
+  const [branding, setBranding] = useState({
+    primaryColor: '#007BFF'
   });
 
   // Allow ADMIN and WAITER roles
@@ -188,6 +197,17 @@ const POSPage = () => {
       }
     };
     fetchTables();
+
+    // Fetch Branding
+    const fetchBranding = async () => {
+      try {
+        const res = await api.get('/admin/branding');
+        if (res.data) setBranding(res.data);
+      } catch (err) {
+        console.error('Branding fetch failed', err);
+      }
+    };
+    fetchBranding();
   }, [isOffline]);
 
   useEffect(() => {
@@ -333,30 +353,47 @@ const POSPage = () => {
 
   const totalBill = calculateTotal();
 
+  // Filtered menu items for POS
+  const filteredMenuItems = menuItems.filter(item => {
+    const matchesCategory = (selectedCategoryId === 'All' || item.category?.id === selectedCategoryId);
+    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()));
+    const isOnlineCheck = (!selectedTable?.isOnline || item.isOnlineAvailable);
+    const isAvailableCheck = (item.isAvailable !== false);
+    
+    return matchesCategory && matchesSearch && isOnlineCheck && isAvailableCheck;
+  });
+
   return (
     <>
-      <div className="desktop-only" style={{ display: 'flex', justifyContent: 'flex-end', gap: '24px', alignItems: 'center', padding: '10px 24px', backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)', fontSize: '13px' }}>
-        <div style={{ display: 'flex', gap: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-          <span style={{ fontWeight: '700', padding: '2px 6px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}>F8</span> Clear Cart
-          <span style={{ fontWeight: '700', padding: '2px 6px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}>ESC</span> Cancel
-        </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', userSelect: 'none' }}>
-          <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>HOTKEYS</span>
-          <div 
-            onClick={() => setShowHotkeys(!showHotkeys)}
-            style={{
-              width: '36px', height: '18px', borderRadius: '9px',
-              backgroundColor: showHotkeys ? 'var(--primary-color)' : '#ccc',
-              position: 'relative', transition: 'background-color 0.2s'
-            }}
-          >
-            <div style={{
-              width: '14px', height: '14px', borderRadius: '50%', backgroundColor: 'white',
-              position: 'absolute', top: '2px', left: showHotkeys ? '20px' : '2px',
-              transition: 'left 0.2s'
-            }} />
+      <div className="desktop-only">
+        <div style={{ 
+          display: 'flex', justifyContent: 'flex-end', gap: '24px', alignItems: 'center', 
+          padding: '10px 24px', backgroundColor: 'var(--bg-secondary)', 
+          borderBottom: '1px solid var(--border-color)', fontSize: '13px', width: '100%'
+        }}>
+          <div style={{ display: 'flex', gap: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+            <span style={{ fontWeight: '700', padding: '2px 6px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}>F8</span> Clear Cart
+            <span style={{ fontWeight: '700', padding: '2px 6px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}>ESC</span> Cancel
           </div>
-        </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', userSelect: 'none' }}>
+            <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>HOTKEYS</span>
+            <div 
+              onClick={() => setShowHotkeys(!showHotkeys)}
+              style={{
+                width: '36px', height: '18px', borderRadius: '9px',
+                backgroundColor: showHotkeys ? 'var(--primary-color)' : '#ccc',
+                position: 'relative', transition: 'background-color 0.2s'
+              }}
+            >
+              <div style={{
+                width: '14px', height: '14px', borderRadius: '50%', backgroundColor: 'white',
+                position: 'absolute', top: '2px', left: showHotkeys ? '20px' : '2px',
+                transition: 'left 0.2s'
+              }} />
+            </div>
+          </label>
+        </div>
       </div>
 
       {isOffline && (
@@ -372,13 +409,21 @@ const POSPage = () => {
           padding: '20px', textAlign: 'center' 
         }}>
           <h2 style={{ fontSize: '32px', marginBottom: '20px' }}>⚠️ Session Blocked</h2>
-          <p style={{ fontSize: '18px', maxWidth: '500px' }}>{subscriptionMessage}</p>
+          <p style={{ fontSize: '18px', maxWidth: '500px', marginBottom: '30px' }}>{subscriptionMessage}</p>
+          <button 
+            className="btn-primary" 
+            onClick={() => handlePayment(1)} 
+            disabled={paymentLoading}
+            style={{ padding: '16px 40px', fontSize: '20px', fontWeight: '700', borderRadius: '12px' }}
+          >
+            {paymentLoading ? 'Processing...' : 'Pay Subscription'}
+          </button>
         </div>
       )}
 
       <div className="pos-layout" style={{ marginBottom: cartItems.length > 0 ? '100px' : '0' }}>
         <div className="pos-tables-col">
-          <h2 style={{ margin: '0 0 8px 0', fontSize: '18px' }}>Tables</h2>
+          <h2 style={{ margin: '0 0 16px 0', fontSize: '20px', fontWeight: '800' }}>Tables</h2>
           {error && <p style={{ color: 'red', fontSize: '13px' }}>{error}</p>}
           <div className="pos-tables-row">
             {tables.length === 0 && !error ? <p>Loading tables...</p> : tables.map(table => {
@@ -386,7 +431,7 @@ const POSPage = () => {
               return (
                 <div 
                   key={table.id || table.tableName}
-                  className="card"
+                  className={`card ${isSelected ? 'selected' : ''}`}
                   onClick={() => setSelectedTable(table)}
                   style={{
                     padding: '16px',
@@ -394,12 +439,16 @@ const POSPage = () => {
                     backgroundColor: isSelected ? 'var(--primary-color)' : 'var(--card-bg)',
                     color: isSelected ? 'white' : 'inherit',
                     cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    borderWidth: isSelected ? '2px' : '1px'
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                    borderWidth: '2px',
+                    borderRadius: '16px',
+                    boxShadow: isSelected ? '0 10px 20px rgba(0,0,0,0.1)' : '0 2px 8px rgba(0,0,0,0.02)'
                   }}
                 >
-                  <h3 style={{ margin: '0 0 8px 0', fontSize: '16px' }}>{table.tableName}</h3>
-                  <small style={{ opacity: isSelected ? 0.9 : 0.6 }}>Cap: {table.capacity}</small>
+                  <h3 style={{ margin: '0 0 6px 0', fontSize: '17px', fontWeight: '700' }}>{table.tableName}</h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', opacity: isSelected ? 0.9 : 0.6 }}>
+                    <span style={{ fontSize: '12px' }}>👥 Capacity: {table.capacity}</span>
+                  </div>
                 </div>
               );
             })}
@@ -407,79 +456,129 @@ const POSPage = () => {
         </div>
 
         {/* Center Column: Menu Items */}
-        <div className="pos-menu-col" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <h2 style={{ margin: 0, fontSize: '18px' }}>
-            Menu {selectedTable ? (
-              <span style={{ color: 'var(--primary-color)' }}>
-                — {selectedTable.tableName} 
-                {selectedTable.isOnline && <span style={{ marginLeft: '8px', color: '#EC4899', fontSize: '12px', fontWeight: 'bold' }}>[ONLINE ORDER]</span>}
-              </span>
-            ) : ''}
-          </h2>
+        <div className="pos-menu-col" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '800' }}>
+              Menu {selectedTable ? (
+                <span style={{ color: 'var(--primary-color)', fontSize: '16px', fontWeight: '600' }}>
+                  / {selectedTable.tableName} 
+                  {selectedTable.isOnline && <span style={{ marginLeft: '12px', color: '#EC4899', fontSize: '11px', padding: '2px 8px', backgroundColor: '#FDF2F8', borderRadius: '20px', verticalAlign: 'middle' }}>ONLINE</span>}
+                </span>
+              ) : ''}
+            </h2>
+          </div>
           
           {!selectedTable ? (
-            <div className="card" style={{ textAlign: 'center', padding: '60px 20px' }}>
-              <p style={{ margin: 0, color: 'var(--text-secondary)' }}>Select a table on the left to begin taking their order.</p>
+            <div className="card" style={{ textAlign: 'center', padding: '100px 20px', borderRadius: '24px', border: '2px dashed var(--border-color)', backgroundColor: 'transparent' }}>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>🪑</div>
+              <h3 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '8px' }}>Select a Table</h3>
+              <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '14px' }}>Choose a table on the left to start adding items to the order.</p>
             </div>
           ) : (
             <>
-              {/* Category Tabs - QR Style (Pills) */}
+              {/* Search Bar - Modern Style */}
+              <div style={{ 
+                backgroundColor: 'white',
+                borderRadius: '16px',
+                padding: '4px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                boxShadow: '0 4px 15px rgba(0,0,0,0.05)',
+                border: '1px solid var(--border-color)'
+              }}>
+                <span style={{ fontSize: '18px' }}>🔍</span>
+                <input 
+                  type="text" 
+                  placeholder="Search dishes or categories..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{ 
+                    border: 'none', 
+                    padding: '12px 0', 
+                    fontSize: '15px', 
+                    width: '100%', 
+                    outline: 'none',
+                    backgroundColor: 'transparent'
+                  }}
+                />
+                {searchQuery && (
+                  <button 
+                    onClick={() => setSearchQuery('')}
+                    style={{ background: 'none', padding: '6px', fontSize: '16px', color: '#cbd5e1' }}
+                  >✕</button>
+                )}
+              </div>
+
+              {/* Category Tabs - Sorted by Category sortOrder */}
               <div style={{ 
                 display: 'flex', 
                 gap: '10px', 
                 overflowX: 'auto', 
-                paddingBottom: '16px',
-                marginBottom: '10px',
+                padding: '4px 2px 16px',
+                margin: '0 -2px',
                 scrollbarWidth: 'none',
-                msOverflowStyle: 'none',
-                width: '100%',
-                maxWidth: '100%'
+                msOverflowStyle: 'none'
               }} className="hide-scrollbar">
                 <button
                   onClick={() => setSelectedCategoryId('All')}
                   style={{
-                    padding: '8px 20px',
-                    borderRadius: '20px',
-                    border: '1px solid var(--primary-color)',
-                    backgroundColor: selectedCategoryId === 'All' ? 'var(--primary-color)' : 'transparent',
-                    color: selectedCategoryId === 'All' ? 'white' : 'var(--primary-color)',
-                    fontWeight: '600',
+                    padding: '10px 24px',
+                    borderRadius: '25px',
+                    border: 'none',
+                    backgroundColor: selectedCategoryId === 'All' ? 'var(--primary-color)' : 'white',
+                    color: selectedCategoryId === 'All' ? 'white' : '#64748b',
+                    fontWeight: '700',
+                    fontSize: '14px',
                     cursor: 'pointer',
                     whiteSpace: 'nowrap',
+                    boxShadow: '0 4px 10px rgba(0,0,0,0.05)',
                     transition: 'all 0.2s'
                   }}
                 >
                   All Items
                 </button>
-                {Array.from(new Set(menuItems.map(item => item.category?.id))).filter(id => id).map(catId => {
-                  const categoryName = menuItems.find(i => i.category?.id === catId)?.category?.name;
-                  return (
+                {Array.from(new Set(menuItems
+                  .filter(item => item.isAvailable !== false) // Only count categories with available items
+                  .map(item => item.category?.id)))
+                  .filter(id => id)
+                  .map(catId => {
+                    const itemWithCat = menuItems.find(i => i.category?.id === catId);
+                    return itemWithCat?.category;
+                  })
+                  .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+                  .map(cat => (
                     <button
-                      key={catId}
-                      onClick={() => setSelectedCategoryId(catId)}
+                      key={cat.id}
+                      onClick={() => setSelectedCategoryId(cat.id)}
                       style={{
-                        padding: '8px 20px',
-                        borderRadius: '20px',
-                        border: '1px solid var(--primary-color)',
-                        backgroundColor: selectedCategoryId === catId ? 'var(--primary-color)' : 'transparent',
-                        color: selectedCategoryId === catId ? 'white' : 'var(--primary-color)',
-                        fontWeight: '600',
+                        padding: '10px 24px',
+                        borderRadius: '25px',
+                        border: 'none',
+                        backgroundColor: selectedCategoryId === cat.id ? 'var(--primary-color)' : 'white',
+                        color: selectedCategoryId === cat.id ? 'white' : '#64748b',
+                        fontWeight: '700',
+                        fontSize: '14px',
                         cursor: 'pointer',
                         whiteSpace: 'nowrap',
+                        boxShadow: '0 4px 10px rgba(0,0,0,0.05)',
                         transition: 'all 0.2s'
                       }}
                     >
-                      {categoryName}
+                      {cat.name}
                     </button>
-                  );
-                })}
+                  ))}
               </div>
 
-              {/* Menu Items List - QR Style (Horizontal Cards) */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {menuItems
-                  .filter(item => (selectedCategoryId === 'All' || item.category?.id === selectedCategoryId) && (!selectedTable.isOnline || item.isOnlineAvailable))
-                  .map(item => {
+              {/* Menu Items List - Sorted by Item sortOrder */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
+                {filteredMenuItems.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px' }}>
+                    <p style={{ color: 'var(--text-secondary)' }}>No items found matches your search.</p>
+                  </div>
+                ) : filteredMenuItems
+                    .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+                    .map(item => {
                     const cartItem = cartItems.find(ci => ci.itemId === item.id);
                     const isOnline = selectedTable?.isOnline;
                     const displayPrice = (isOnline && item.onlinePrice != null) ? item.onlinePrice : item.price;
@@ -493,64 +592,71 @@ const POSPage = () => {
                           justifyContent: 'space-between', 
                           alignItems: 'center', 
                           padding: '16px',
-                          gap: '12px'
+                          gap: '16px',
+                          borderRadius: '20px',
+                          border: '1px solid #f1f5f9',
+                          transition: 'transform 0.1s active'
                         }}
                       >
                         <div style={{ display: 'flex', gap: '16px', flex: 1, minWidth: 0 }}>
-                          {item.imageUrl && (
-                            <img 
-                              src={`${import.meta.env.VITE_IMAGE_BASE_URL || 'http://localhost:8080'}${item.imageUrl}`} 
-                              alt={item.name} 
-                              style={{ width: '80px', height: '80px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0 }} 
-                            />
-                          )}
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: 0 }}>
-                            <strong style={{ fontSize: '18px', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</strong>
+                          <div style={{ width: '80px', height: '80px', borderRadius: '14px', overflow: 'hidden', flexShrink: 0, backgroundColor: '#f8fafc' }}>
+                            {item.imageUrl ? (
+                              <img 
+                                src={`${import.meta.env.VITE_IMAGE_BASE_URL || 'http://localhost:8080'}${item.imageUrl}`} 
+                                alt={item.name} 
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                              />
+                            ) : (
+                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px' }}>🍲</div>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: 0, justifyContent: 'center' }}>
+                            <strong style={{ fontSize: '17px', fontWeight: '700', color: '#1e293b' }}>{item.name}</strong>
                             {item.description && (
                               <p style={{ 
                                 margin: 0, 
                                 fontSize: '13px', 
                                 color: 'var(--text-secondary)', 
                                 lineHeight: '1.4',
-                                display: '-webkit-box',
-                                WebkitLineClamp: 2,
-                                WebkitBoxOrient: 'vertical',
-                                overflow: 'hidden'
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
                               }}>
                                 {item.description}
                               </p>
                             )}
-                            <span style={{ color: 'var(--success-color)', fontWeight: 'bold', fontSize: '16px', marginTop: '4px' }}>
+                            <span style={{ color: 'var(--primary-color)', fontWeight: '800', fontSize: '17px', marginTop: '2px' }}>
                               ₹{parseFloat(displayPrice).toFixed(2)}
-                              {isOnline && item.onlinePrice != null && <span style={{ fontSize: '10px', color: 'var(--text-secondary)', marginLeft: '4px' }}>(Online Price)</span>}
+                              {isOnline && item.onlinePrice != null && <span style={{ fontSize: '10px', color: '#EC4899', marginLeft: '6px', fontWeight: '600' }}>[ONLINE PRICE]</span>}
                             </span>
                           </div>
                         </div>
 
                         {/* Integrated Quantity Controls - Match QR style */}
                         {cartItem ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: '#f1f5f9', padding: '4px', borderRadius: '30px' }}>
                             <button
                               onClick={() => updateCartQuantity(item.id, -1)}
                               style={{
-                                width: '34px', height: '34px', borderRadius: '50%',
-                                backgroundColor: 'var(--bg-secondary)',
-                                border: '1px solid var(--border-color)',
+                                width: '32px', height: '32px', borderRadius: '50%',
+                                backgroundColor: 'white', border: 'none',
                                 fontSize: '18px', fontWeight: '700', cursor: 'pointer',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
                               }}
                             >−</button>
-                            <span style={{ minWidth: '22px', textAlign: 'center', fontWeight: '700', fontSize: '16px' }}>
+                            <span style={{ minWidth: '24px', textAlign: 'center', fontWeight: '800', fontSize: '15px' }}>
                               {cartItem.quantity}
                             </span>
                             <button
                               onClick={() => updateCartQuantity(item.id, 1)}
                               style={{
-                                width: '34px', height: '34px', borderRadius: '50%',
+                                width: '32px', height: '32px', borderRadius: '50%',
                                 backgroundColor: 'var(--primary-color)',
                                 border: 'none', color: 'white',
                                 fontSize: '18px', fontWeight: '700', cursor: 'pointer',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
                               }}
                             >+</button>
                           </div>
@@ -558,7 +664,7 @@ const POSPage = () => {
                           <button 
                             className="btn-primary"
                             onClick={() => handleAddToCart(item)}
-                            style={{ padding: '10px 22px', fontSize: '15px', borderRadius: '8px', flexShrink: 0 }}
+                            style={{ padding: '10px 24px', fontSize: '15px', borderRadius: '30px', fontWeight: '700', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                           >
                             Add
                           </button>
@@ -571,7 +677,7 @@ const POSPage = () => {
           )}
         </div>
 
-        {/* Original Sidebar Cart - Hidden via CSS class on mobile */}
+        {/* Sidebar Cart Column */}
         <div className="pos-cart-col desktop-only-cart">
           <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
             <h2 style={{ margin: '0 0 16px 0', fontSize: '18px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>Current Order</h2>
@@ -632,7 +738,7 @@ const POSPage = () => {
                   {isPlacingOrder ? 'Processing...' : 'Place Order'}
                 </button>
                 {showHotkeys && cartItems.length > 0 && (
-                  <span style={{ position: 'absolute', top: '-10px', right: '-10px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', zIndex: 10 }}>F4</span>
+                  <span className="desktop-only" style={{ position: 'absolute', top: '-10px', right: '-10px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', zIndex: 10 }}>F4</span>
                 )}
               </div>
             </div>
@@ -713,7 +819,7 @@ const POSPage = () => {
                   Cancel
                 </button>
                 {showHotkeys && (
-                  <span style={{ position: 'absolute', top: '4px', right: '4px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>ESC</span>
+                  <span className="desktop-only" style={{ position: 'absolute', top: '4px', right: '4px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>ESC</span>
                 )}
               </div>
               <div style={{ flex: 1, position: 'relative' }}>
@@ -726,7 +832,7 @@ const POSPage = () => {
                   {isPlacingOrder ? 'Placing...' : 'Confirm'}
                 </button>
                 {showHotkeys && (
-                  <span style={{ position: 'absolute', top: '4px', right: '4px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>F4</span>
+                  <span className="desktop-only" style={{ position: 'absolute', top: '4px', right: '4px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>F4</span>
                 )}
               </div>
             </div>
