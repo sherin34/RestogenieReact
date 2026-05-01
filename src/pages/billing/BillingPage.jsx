@@ -85,11 +85,37 @@ const BillingPage = () => {
     }
   };
 
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownloadPDF = async (orderId) => {
+    setIsDownloading(true);
+    try {
+      const response = await api.get(`/billing/${orderId}/pdf`, {
+        responseType: 'blob',
+      });
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `bill_${orderId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      showToast('PDF downloaded successfully!', 'success');
+    } catch (err) {
+      showToast('Failed to download PDF', 'error');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+
   const handlePrint = async (orderId) => {
     setIsPrinting(true);
     try {
       // Fetch the PDF from backend
-      const response = await api.get(`/orders/${orderId}/bill/pdf`, {
+      const response = await api.get(`/billing/${orderId}/pdf`, {
         responseType: 'blob',
       });
       
@@ -550,16 +576,17 @@ const BillingPage = () => {
               )}
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', marginTop: '30px' }}>
-              <div style={{ flex: 1, position: 'relative' }}>
-                <button className="btn-secondary" onClick={() => setBill(null)} style={{ width: '100%', padding: '12px' }}>
-                  Cancel
-                </button>
-                {showHotkeys && (
-                  <span style={{ position: 'absolute', top: '-10px', right: '-5px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>ESC</span>
-                )}
-              </div>
-              <div style={{ flex: 1.5, position: 'relative' }}>
+
+            <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+              <button 
+                className="btn-secondary" 
+                onClick={() => handleDownloadPDF(bill.orderId)}
+                disabled={isDownloading}
+                style={{ flex: 1, padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', borderRadius: '10px' }}
+              >
+                <span>{isDownloading ? '...' : '📥'}</span> Download PDF
+              </button>
+              <div style={{ flex: 2, position: 'relative' }}>
                 <button 
                   className="btn-primary" 
                   onClick={async () => { 
@@ -572,15 +599,23 @@ const BillingPage = () => {
                     }
                   }} 
                   disabled={isPrinting}
-                  style={{ width: '100%', padding: '12px', backgroundColor: 'var(--success-color)', borderRadius: '10px' }}
+                  style={{ width: '100%', padding: '12px', backgroundColor: 'var(--success-color)', borderRadius: '10px', fontSize: '15px', fontWeight: '700' }}
                 >
                   {isPrinting ? 'Printing...' : (orders.find(o => o.orderId === bill.orderId) ? 'Print & Complete' : 'Print Again')}
                 </button>
                 {showHotkeys && (
-                  <span style={{ position: 'absolute', top: '-10px', right: '-5px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>P / ENTER</span>
+                  <span style={{ position: 'absolute', top: '-10px', right: '-5px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold', zIndex: 10 }}>P / ENTER</span>
                 )}
               </div>
             </div>
+            
+            <button 
+              className="btn-secondary" 
+              onClick={() => setBill(null)} 
+              style={{ width: '100%', marginTop: '12px', padding: '10px', border: 'none', color: 'var(--text-secondary)', fontSize: '13px' }}
+            >
+              Close Modal (ESC)
+            </button>
           </div>
         </div>
       )}
