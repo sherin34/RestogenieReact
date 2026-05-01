@@ -106,7 +106,7 @@ const CartPanel = ({ cartItems, totalBill, updateCartQuantity, removeFromCart, i
 };
 
 const QRPage = () => {
-  const { tableId } = useParams();
+  const { tenantId, qrToken } = useParams();
   const { showToast } = useToast();
   const [menuItems, setMenuItems] = useState([]);
   const [restaurantName, setRestaurantName] = useState('Restaurant');
@@ -179,7 +179,7 @@ const QRPage = () => {
   const startPolling = (orderId) => {
     pollingRef.current = setInterval(async () => {
       try {
-        const res = await api.get(`/qr/order/${orderId}/status`);
+        const res = await api.get(`/qr/${tenantId}/${qrToken}/order/${orderId}/status`);
         setTrackedOrder(res.data);
         if (res.data.status === 'READY' || res.data.status === 'COMPLETED' || res.data.status === 'CANCELLED') {
           clearInterval(pollingRef.current);
@@ -207,7 +207,7 @@ const QRPage = () => {
         })),
         notes: orderNotes
       };
-      const res = await api.post(`/qr/${tableId}/order`, orderPayload);
+      const res = await api.post(`/qr/${tenantId}/${qrToken}/order`, orderPayload);
       setCartItems([]);
       setOrderNotes('');
       setTrackedOrder(res.data);
@@ -225,7 +225,7 @@ const QRPage = () => {
   useEffect(() => {
     const fetchMenu = async () => {
       try {
-        const response = await api.get(`/qr/${tableId}/menu`);
+        const response = await api.get(`/qr/${tenantId}/${qrToken}/menu`);
         setMenuItems(response.data.categories);
         const name = response.data.restaurantName || 'Restaurant';
         setRestaurantName(name);
@@ -244,8 +244,8 @@ const QRPage = () => {
         setLoading(false);
       }
     };
-    if (tableId) fetchMenu();
-  }, [tableId]);
+    if (tenantId && qrToken) fetchMenu();
+  }, [tenantId, qrToken]);
 
   const currentStepIndex = trackedOrder
     ? STATUS_STEPS.findIndex(s => s.key === trackedOrder.status)
@@ -314,7 +314,7 @@ const QRPage = () => {
               fontWeight: '800',
               border: '1px solid rgba(255, 255, 255, 0.25)'
             }}>
-               <span style={{ opacity: 0.7, fontWeight: '500' }}>Table</span> {tableId}
+               <span style={{ opacity: 0.7, fontWeight: '500' }}>Table</span> {qrToken.substring(0, 4)}...
             </div>
 
             {branding.instagramUrl && (

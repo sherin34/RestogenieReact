@@ -81,7 +81,7 @@ function App() {
           />
           
           {/* Public Route depending on business logic, assuming public for now */}
-          <Route path="/qr/:tableId" element={<QRPage />} />
+          <Route path="/qr/:tenantId/:qrToken" element={<QRPage />} />
           
           {/* Default Route */}
           <Route path="*" element={<Login />} />

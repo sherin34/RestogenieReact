@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { useToast } from '../../context/ToastContext';
+import { getTenantId } from '../../utils/auth';
 
 const QRGeneratorPage = () => {
   const { showToast } = useToast();
@@ -23,14 +24,17 @@ const QRGeneratorPage = () => {
     fetchTables();
   }, [showToast]);
 
-  const getQRUrl = (tableName) => {
-    const guestUrl = `${window.location.origin}/qr/${tableName}`;
+  const getQRUrl = (qrToken) => {
+    const tenantId = getTenantId();
+    const guestUrl = `${window.location.origin}/qr/${tenantId}/${qrToken}`;
     return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(guestUrl)}`;
   };
 
-  const handlePrint = (tableName) => {
-    const qrImageUrl = getQRUrl(tableName);
-    const guestUrl = `${window.location.origin}/qr/${tableName}`;
+  const handlePrint = (table) => {
+    const { tableName, qrToken } = table;
+    const qrImageUrl = getQRUrl(qrToken);
+    const tenantId = getTenantId();
+    const guestUrl = `${window.location.origin}/qr/${tenantId}/${qrToken}`;
     
     // Create a hidden print window
     const printWindow = window.open('', '_blank');
@@ -73,9 +77,10 @@ const QRGeneratorPage = () => {
     printWindow.document.close();
   };
 
-  const handleDownload = async (tableName) => {
+  const handleDownload = async (table) => {
+    const { tableName, qrToken } = table;
     try {
-      const qrImageUrl = getQRUrl(tableName);
+      const qrImageUrl = getQRUrl(qrToken);
       const response = await fetch(qrImageUrl);
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -126,7 +131,7 @@ const QRGeneratorPage = () => {
                 boxShadow: 'var(--shadow-sm)'
               }}>
                 <img 
-                  src={getQRUrl(table.tableName)} 
+                  src={getQRUrl(table.qrToken)} 
                   alt={`QR for ${table.tableName}`}
                   style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                 />
@@ -141,7 +146,7 @@ const QRGeneratorPage = () => {
                   <button 
                     className="btn-primary" 
                     style={{ flex: 1, padding: '8px', fontSize: '13px' }}
-                    onClick={() => window.open(`/qr/${table.tableName}`, '_blank')}
+                    onClick={() => window.open(`/qr/${getTenantId()}/${table.qrToken}`, '_blank')}
                   >
                     View
                   </button>
@@ -150,14 +155,14 @@ const QRGeneratorPage = () => {
                   <button 
                     className="btn-secondary"
                     style={{ flex: 1, padding: '8px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
-                    onClick={() => handlePrint(table.tableName)}
+                    onClick={() => handlePrint(table)}
                   >
                     Print
                   </button>
                   <button 
                     className="btn-secondary"
                     style={{ flex: 1, padding: '8px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
-                    onClick={() => handleDownload(table.tableName)}
+                    onClick={() => handleDownload(table)}
                   >
                     Save
                   </button>
