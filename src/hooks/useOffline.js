@@ -57,12 +57,19 @@ export const useOffline = () => {
 
   const validateDate = (validTill) => {
     const expiryDate = new Date(validTill);
+    const graceExpiryDate = new Date(expiryDate.getTime() + (24 * 60 * 60 * 1000)); // Add 24 hours
     const currentDate = new Date();
-    if (currentDate > expiryDate) {
+    
+    if (currentDate > graceExpiryDate) {
       setSubscriptionValid(false);
       setSubscriptionMessage('Subscription expired. Please renew to continue.');
+    } else if (currentDate > expiryDate) {
+      // Within Grace Period
+      setSubscriptionValid(true);
+      setSubscriptionMessage('Subscription in grace period. Please renew soon.');
     } else {
       setSubscriptionValid(true);
+      setSubscriptionMessage('');
     }
   };
 
@@ -88,7 +95,8 @@ export const useOffline = () => {
     const offlineOrders = JSON.parse(localStorage.getItem('offlineOrders') || '[]');
     const newOrder = {
       ...order,
-      clientOrderId: Date.now().toString(),
+      // Generate a unique ID: Timestamp (base36) + Random (base36)
+      clientOrderId: `OFF-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 9)}`.toUpperCase(),
       createdAt: new Date().toISOString()
     };
     offlineOrders.push(newOrder);

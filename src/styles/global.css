@@ -273,29 +273,32 @@ table {
 
 @media (max-width: 1024px) {
   .pos-layout {
-    flex-direction: column;
-    padding: 12px;
-    gap: 16px;
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
   .pos-tables-col {
-    flex: none;
-    width: 100%;
-    order: 1;
+    width: 100% !important;
+    padding: 12px !important;
+    box-sizing: border-box !important;
   }
   .pos-tables-row {
-    display: flex;
-    flex-direction: row;
-    overflow-x: auto;
-    gap: 10px;
-    padding-bottom: 8px;
+    display: flex !important;
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    gap: 10px !important;
+    padding-bottom: 8px !important;
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
   .pos-tables-row::-webkit-scrollbar { display: none; }
 
   .pos-menu-col {
-    order: 2;
-    width: 100%;
+    width: 100% !important;
+    padding: 12px !important;
+    box-sizing: border-box !important;
   }
 
   .pos-cart-col {

@@ -146,6 +146,7 @@ const POSPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [cartExpanded, setCartExpanded] = useState(false);
   const [showHotkeys, setShowHotkeys] = useState(true);
+  const [detailItem, setDetailItem] = useState(null);
   
   const { 
     isOffline, 
@@ -248,9 +249,11 @@ const POSPage = () => {
         }
       }
       
-      // Escape: Close Modal or Deselect Table
+      // Escape: Close Modals or Deselect Table
       if (e.key === 'Escape') {
-        if (showConfirm) {
+        if (detailItem) {
+          setDetailItem(null);
+        } else if (showConfirm) {
           setShowConfirm(false);
         } else if (selectedTable) {
           setSelectedTable(null);
@@ -267,7 +270,7 @@ const POSPage = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showConfirm, cartItems, selectedTable]);
+  }, [showConfirm, cartItems, selectedTable, detailItem]);
 
   const handleAddToCart = (item) => {
     setCartExpanded(false); // Collapse cart when adding a new item
@@ -586,20 +589,27 @@ const POSPage = () => {
                     return (
                       <div 
                         key={item.id} 
-                        className="card" 
+                        className="pos-item-card" 
                         style={{ 
                           display: 'flex', 
+                          flexDirection: 'row',
                           justifyContent: 'space-between', 
                           alignItems: 'center', 
-                          padding: '16px',
-                          gap: '16px',
-                          borderRadius: '20px',
+                          padding: '12px',
+                          gap: '12px',
+                          borderRadius: '16px',
                           border: '1px solid #f1f5f9',
-                          transition: 'transform 0.1s active'
+                          backgroundColor: 'var(--card-bg)',
+                          transition: 'transform 0.1s active',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+                          minHeight: '80px'
                         }}
                       >
-                        <div style={{ display: 'flex', gap: '16px', flex: 1, minWidth: 0 }}>
-                          <div style={{ width: '80px', height: '80px', borderRadius: '14px', overflow: 'hidden', flexShrink: 0, backgroundColor: '#f8fafc' }}>
+                        <div style={{ display: 'flex', gap: '12px', flex: 1, minWidth: 0, alignItems: 'center' }}>
+                          <div 
+                            onClick={() => setDetailItem(item)}
+                            style={{ width: '60px', height: '60px', borderRadius: '12px', overflow: 'hidden', flexShrink: 0, backgroundColor: '#f8fafc', cursor: 'pointer' }}
+                          >
                             {item.imageUrl ? (
                               <img 
                                 src={`${import.meta.env.VITE_IMAGE_BASE_URL || 'http://localhost:8080'}${item.imageUrl}`} 
@@ -607,54 +617,61 @@ const POSPage = () => {
                                 style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
                               />
                             ) : (
-                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px' }}>🍲</div>
+                              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>🍲</div>
                             )}
                           </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: 0, justifyContent: 'center' }}>
-                            <strong style={{ fontSize: '17px', fontWeight: '700', color: '#1e293b' }}>{item.name}</strong>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, minWidth: 0 }}>
+                            <strong style={{ fontSize: '15px', fontWeight: '700', color: '#1e293b' }}>{item.name}</strong>
                             {item.description && (
                               <p style={{ 
                                 margin: 0, 
-                                fontSize: '13px', 
+                                fontSize: '12px', 
                                 color: 'var(--text-secondary)', 
-                                lineHeight: '1.4',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis'
+                                lineHeight: '1.3',
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                                overflow: 'hidden'
                               }}>
                                 {item.description}
                               </p>
                             )}
-                            <span style={{ color: 'var(--primary-color)', fontWeight: '800', fontSize: '17px', marginTop: '2px' }}>
+                            <span style={{ color: 'var(--primary-color)', fontWeight: '800', fontSize: '15px' }}>
                               ₹{parseFloat(displayPrice).toFixed(2)}
-                              {isOnline && item.onlinePrice != null && <span style={{ fontSize: '10px', color: '#EC4899', marginLeft: '6px', fontWeight: '600' }}>[ONLINE PRICE]</span>}
                             </span>
                           </div>
                         </div>
 
                         {/* Integrated Quantity Controls - Match QR style */}
                         {cartItem ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: '#f1f5f9', padding: '4px', borderRadius: '30px' }}>
+                          <div className="pos-item-controls" style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '8px', 
+                            backgroundColor: '#f1f5f9', 
+                            padding: '4px', 
+                            borderRadius: '30px'
+                          }}>
                             <button
                               onClick={() => updateCartQuantity(item.id, -1)}
                               style={{
-                                width: '32px', height: '32px', borderRadius: '50%',
+                                width: '28px', height: '28px', borderRadius: '50%',
                                 backgroundColor: 'white', border: 'none',
-                                fontSize: '18px', fontWeight: '700', cursor: 'pointer',
+                                fontSize: '16px', fontWeight: '700', cursor: 'pointer',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
                               }}
                             >−</button>
-                            <span style={{ minWidth: '24px', textAlign: 'center', fontWeight: '800', fontSize: '15px' }}>
+                            <span style={{ minWidth: '16px', textAlign: 'center', fontWeight: '800', fontSize: '14px' }}>
                               {cartItem.quantity}
                             </span>
                             <button
                               onClick={() => updateCartQuantity(item.id, 1)}
                               style={{
-                                width: '32px', height: '32px', borderRadius: '50%',
+                                width: '28px', height: '28px', borderRadius: '50%',
                                 backgroundColor: 'var(--primary-color)',
                                 border: 'none', color: 'white',
-                                fontSize: '18px', fontWeight: '700', cursor: 'pointer',
+                                fontSize: '16px', fontWeight: '700', cursor: 'pointer',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
                               }}
@@ -662,9 +679,18 @@ const POSPage = () => {
                           </div>
                         ) : (
                           <button 
-                            className="btn-primary"
+                            className="btn-primary pos-add-btn"
                             onClick={() => handleAddToCart(item)}
-                            style={{ padding: '10px 24px', fontSize: '15px', borderRadius: '30px', fontWeight: '700', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                            style={{ 
+                              padding: '8px 20px', 
+                              fontSize: '14px', 
+                              borderRadius: '20px', 
+                              fontWeight: '700', 
+                              border: 'none', 
+                              backgroundColor: 'var(--primary-color)',
+                              color: 'white',
+                              flexShrink: 0
+                            }}
                           >
                             Add
                           </button>
@@ -835,6 +861,47 @@ const POSPage = () => {
                   <span className="desktop-only" style={{ position: 'absolute', top: '4px', right: '4px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>F4</span>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Item Detail Modal ── */}
+      {detailItem && (
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: '20px',
+          backdropFilter: 'blur(8px)'
+        }} onClick={() => setDetailItem(null)}>
+          <div className="card" style={{ maxWidth: '400px', width: '100%', padding: '0', borderRadius: '24px', overflow: 'hidden', position: 'relative' }} onClick={e => e.stopPropagation()}>
+            <button 
+              onClick={() => setDetailItem(null)}
+              style={{ position: 'absolute', top: '16px', right: '16px', width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.9)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
+            >✕</button>
+            
+            <div style={{ width: '100%', height: '300px', backgroundColor: '#f8fafc' }}>
+              {detailItem.imageUrl ? (
+                <img src={`${import.meta.env.VITE_IMAGE_BASE_URL || 'http://localhost:8080'}${detailItem.imageUrl}`} alt={detailItem.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '64px' }}>🍲</div>
+              )}
+            </div>
+            
+            <div style={{ padding: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px', gap: '16px' }}>
+                <h2 style={{ margin: 0, fontSize: '24px', fontWeight: '800' }}>{detailItem.name}</h2>
+                <span style={{ color: 'var(--primary-color)', fontWeight: '900', fontSize: '22px', whiteSpace: 'nowrap' }}>₹{parseFloat((selectedTable?.isOnline && detailItem.onlinePrice != null) ? detailItem.onlinePrice : detailItem.price).toFixed(2)}</span>
+              </div>
+              
+              {detailItem.description && (
+                <p style={{ margin: '0 0 24px 0', color: 'var(--text-secondary)', lineHeight: '1.6', fontSize: '15px' }}>{detailItem.description}</p>
+              )}
+              
+              <button 
+                className="btn-primary" 
+                onClick={() => { handleAddToCart(detailItem); setDetailItem(null); }}
+                style={{ width: '100%', padding: '16px', fontSize: '16px', fontWeight: '700', borderRadius: '12px' }}
+              >Add to Order</button>
             </div>
           </div>
         </div>
