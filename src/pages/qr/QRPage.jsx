@@ -140,7 +140,6 @@ const QRPage = () => {
     .map(cat => ({
       ...cat,
       items: cat.items?.filter(item => 
-        (item.isAvailable !== false) && 
         (item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
          item.description?.toLowerCase().includes(searchQuery.toLowerCase()))
       ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
@@ -246,6 +245,28 @@ const QRPage = () => {
     };
     if (tenantId && qrToken) fetchMenu();
   }, [tenantId, qrToken]);
+
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackData, setFeedbackData] = useState({ rating: 5, message: '', mobileNumber: '', customerName: '' });
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
+
+  const handleFeedbackSubmit = async () => {
+    if (!feedbackData.message.trim()) {
+      showToast('Please enter your feedback message', 'error');
+      return;
+    }
+    setIsSubmittingFeedback(true);
+    try {
+      await api.post(`/qr/${tenantId}/feedback`, feedbackData);
+      showToast('Thank you for your feedback!', 'success');
+      setShowFeedbackModal(false);
+      setFeedbackData({ rating: 5, message: '', mobileNumber: '', customerName: '' });
+    } catch (err) {
+      showToast('Failed to submit feedback. Please try again.', 'error');
+    } finally {
+      setIsSubmittingFeedback(false);
+    }
+  };
 
   const currentStepIndex = trackedOrder
     ? STATUS_STEPS.findIndex(s => s.key === trackedOrder.status)
@@ -485,9 +506,22 @@ const QRPage = () => {
                             border: '1px solid #f1f5f9',
                             transition: 'transform 0.2s',
                             position: 'relative',
-                            overflow: 'hidden'
+                            overflow: 'hidden',
+                            opacity: item.isAvailable === false ? 0.6 : 1,
+                            filter: item.isAvailable === false ? 'grayscale(0.5)' : 'none'
                           }}
                         >
+                          {item.isAvailable === false && (
+                             <div style={{
+                               position: 'absolute', top: '12px', right: '-35px',
+                               backgroundColor: '#ef4444', color: 'white',
+                               padding: '4px 40px', fontSize: '10px', fontWeight: '900',
+                               transform: 'rotate(45deg)', zIndex: 10,
+                               boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
+                             }}>
+                               SOLD OUT
+                             </div>
+                           )}
                           <div style={{ width: '100px', height: '100px', borderRadius: '18px', overflow: 'hidden', flexShrink: 0, backgroundColor: '#f1f5f9' }}>
                             {item.imageUrl ? (
                               <img
@@ -501,7 +535,7 @@ const QRPage = () => {
                           </div>
 
                           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, justifyContent: 'center' }}>
-                            <h3 style={{ margin: '0 0 4px 0', fontSize: '17px', fontWeight: '700', color: '#1e293b' }}>{item.name}</h3>
+                            <h3 style={{ margin: '0 0 4px 0', fontSize: '17px', fontWeight: '700', color: item.isAvailable === false ? '#94a3b8' : '#1e293b' }}>{item.name}</h3>
                             {item.description && (
                               <p style={{ 
                                 margin: '0 0 10px 0', 
@@ -554,16 +588,19 @@ const QRPage = () => {
                                 return (
                                   <button
                                     className="btn-primary"
-                                    onClick={() => handleAddToCart(item)}
+                                    onClick={() => item.isAvailable !== false && handleAddToCart(item)}
+                                    disabled={item.isAvailable === false}
                                     style={{ 
                                       padding: '8px 24px', 
                                       fontSize: '14px', 
                                       borderRadius: '30px', 
-                                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                                      border: 'none'
+                                      boxShadow: item.isAvailable === false ? 'none' : '0 4px 12px rgba(0,0,0,0.1)',
+                                      border: 'none',
+                                      backgroundColor: item.isAvailable === false ? '#cbd5e1' : 'var(--primary-color)',
+                                      cursor: item.isAvailable === false ? 'not-allowed' : 'pointer'
                                     }}
                                   >
-                                    Add
+                                    {item.isAvailable === false ? 'Unavailable' : 'Add'}
                                   </button>
                                 );
                               })()}
@@ -734,26 +771,66 @@ const QRPage = () => {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '32px' }}>
-              {STATUS_STEPS.map((step, idx) => {
-                const isDone = currentStepIndex >= idx;
-                const isCurrent = currentStepIndex === idx;
-                return (
-                  <div key={step.key} style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{
-                      width: '40px', height: '40px', borderRadius: '12px',
-                      backgroundColor: isDone ? 'var(--success-color)' : '#f1f5f9',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '20px', transition: 'all 0.4s'
-                    }}>
-                      {isDone ? '✓' : step.icon}
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: '700', fontSize: '15px', color: isDone ? '#1e293b' : '#94a3b8' }}>{step.label}</div>
-                      {isCurrent && <div style={{ fontSize: '12px', color: 'var(--success-color)', fontWeight: '600' }}>In Progress...</div>}
+              {trackedOrder.status === 'REJECTED' ? (
+                <div style={{ 
+                  backgroundColor: '#fef2f2', padding: '24px', borderRadius: '20px', 
+                  border: '1px solid #fee2e2', textAlign: 'center' 
+                }}>
+                  <div style={{ fontSize: '48px', marginBottom: '16px' }}>❌</div>
+                  <h3 style={{ color: '#991b1b', fontSize: '18px', fontWeight: '800', marginBottom: '8px' }}>Order Rejected</h3>
+                  <p style={{ color: '#b91c1c', fontSize: '14px', margin: 0 }}>
+                    {trackedOrder.rejectionNote || 'The kitchen is unable to process your order at this time.'}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {STATUS_STEPS.map((step, idx) => {
+                    const isDone = currentStepIndex >= idx;
+                    const isCurrent = currentStepIndex === idx;
+                    return (
+                      <div key={step.key} style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        <div style={{
+                          width: '40px', height: '40px', borderRadius: '12px',
+                          backgroundColor: isDone ? 'var(--success-color)' : '#f1f5f9',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '20px', transition: 'all 0.4s'
+                        }}>
+                          {isDone ? '✓' : step.icon}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: '700', fontSize: '15px', color: isDone ? '#1e293b' : '#94a3b8' }}>{step.label}</div>
+                          {isCurrent && <div style={{ fontSize: '12px', color: 'var(--success-color)', fontWeight: '600' }}>In Progress...</div>}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  <div style={{ marginTop: '12px', padding: '20px', backgroundColor: '#f8fafc', borderRadius: '24px' }}>
+                    <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Order Items</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {trackedOrder.items?.map((item, i) => {
+                        const isReady = item.status === 'READY';
+                        return (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                              <span style={{ fontWeight: '700', color: isReady ? 'var(--success-color)' : '#1e293b' }}>{item.quantity}x</span>
+                              <span style={{ fontSize: '14px', color: '#475569' }}>{item.menuItemName || item.name}</span>
+                            </div>
+                            <span style={{ 
+                              fontSize: '11px', padding: '2px 8px', borderRadius: '12px',
+                              backgroundColor: isReady ? '#dcfce7' : '#f1f5f9',
+                              color: isReady ? '#166534' : '#64748b',
+                              fontWeight: '700'
+                            }}>
+                              {isReady ? 'READY' : 'PREPARING'}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                );
-              })}
+                </>
+              )}
             </div>
 
             <button 
@@ -799,6 +876,106 @@ const QRPage = () => {
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
+      {/* Floating Feedback Button */}
+      <button
+        onClick={() => setShowFeedbackModal(true)}
+        style={{
+          position: 'fixed', bottom: cartItems.length > 0 ? '110px' : '24px', right: '24px',
+          width: '60px', height: '60px', borderRadius: '50%',
+          backgroundColor: 'white', color: 'var(--primary-color)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 8px 30px rgba(0,0,0,0.15)', border: 'none',
+          fontSize: '24px', zIndex: 150, cursor: 'pointer',
+          transition: 'all 0.3s ease'
+        }}
+        title="Give Feedback"
+      >
+        💬
+      </button>
+
+      {/* Feedback Modal */}
+      {showFeedbackModal && (
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000,
+          backdropFilter: 'blur(8px)', padding: '20px'
+        }}>
+          <div style={{ 
+            backgroundColor: 'white', width: '100%', maxWidth: '440px', 
+            padding: '32px', borderRadius: '32px', boxShadow: '0 25px 50px rgba(0,0,0,0.2)'
+          }}>
+            <h2 style={{ margin: '0 0 8px 0', fontSize: '24px', fontWeight: '800' }}>Your Feedback</h2>
+            <p style={{ margin: '0 0 24px 0', color: '#64748b', fontSize: '15px' }}>Help us improve your dining experience</p>
+
+            <div style={{ marginBottom: '24px', textAlign: 'center' }}>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '700', marginBottom: '12px' }}>Rating</label>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                {[1, 2, 3, 4, 5].map(star => (
+                  <button
+                    key={star}
+                    onClick={() => setFeedbackData({ ...feedbackData, rating: star })}
+                    style={{
+                      background: 'none', border: 'none', fontSize: '32px', cursor: 'pointer',
+                      color: star <= feedbackData.rating ? '#f59e0b' : '#e2e8f0',
+                      transition: 'transform 0.1s active'
+                    }}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <input
+                type="text"
+                placeholder="Your Name (Optional)"
+                value={feedbackData.customerName}
+                onChange={(e) => setFeedbackData({ ...feedbackData, customerName: e.target.value })}
+                style={{ width: '100%', padding: '14px 18px', borderRadius: '14px', border: '1px solid #e2e8f0', marginBottom: '12px', outline: 'none' }}
+              />
+              <input
+                type="tel"
+                placeholder="Mobile Number (Optional)"
+                value={feedbackData.mobileNumber}
+                onChange={(e) => setFeedbackData({ ...feedbackData, mobileNumber: e.target.value })}
+                style={{ width: '100%', padding: '14px 18px', borderRadius: '14px', border: '1px solid #e2e8f0', outline: 'none' }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '28px' }}>
+              <textarea
+                placeholder="Tell us about your experience..."
+                value={feedbackData.message}
+                onChange={(e) => setFeedbackData({ ...feedbackData, message: e.target.value })}
+                style={{ 
+                  width: '100%', padding: '16px', borderRadius: '16px', 
+                  border: '1px solid #e2e8f0', minHeight: '120px', 
+                  resize: 'none', outline: 'none', fontSize: '15px'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => setShowFeedbackModal(false)}
+                className="btn-secondary"
+                style={{ flex: 1, padding: '14px', borderRadius: '14px' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleFeedbackSubmit}
+                disabled={isSubmittingFeedback}
+                className="btn-primary"
+                style={{ flex: 2, padding: '14px', borderRadius: '14px' }}
+              >
+                {isSubmittingFeedback ? 'Sending...' : 'Submit Feedback'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

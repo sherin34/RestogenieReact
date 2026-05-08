@@ -145,7 +145,15 @@ const POSPage = () => {
   const [showConfirm, setShowConfirm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [cartExpanded, setCartExpanded] = useState(false);
-  const [showHotkeys, setShowHotkeys] = useState(true);
+  const [showHotkeys, setShowHotkeys] = useState(() => {
+    const saved = localStorage.getItem('pos_show_hotkeys');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('pos_show_hotkeys', JSON.stringify(showHotkeys));
+  }, [showHotkeys]);
+
   const [detailItem, setDetailItem] = useState(null);
   
   const { 
@@ -362,9 +370,8 @@ const POSPage = () => {
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()));
     const isOnlineCheck = (!selectedTable?.isOnline || item.isOnlineAvailable);
-    const isAvailableCheck = (item.isAvailable !== false);
     
-    return matchesCategory && matchesSearch && isOnlineCheck && isAvailableCheck;
+    return matchesCategory && matchesSearch && isOnlineCheck;
   });
 
   return (
@@ -599,10 +606,13 @@ const POSPage = () => {
                           gap: '12px',
                           borderRadius: '16px',
                           border: '1px solid #f1f5f9',
-                          backgroundColor: 'var(--card-bg)',
-                          transition: 'transform 0.1s active',
+                          backgroundColor: item.isAvailable === false ? '#f8fafc' : 'var(--card-bg)',
+                          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                           boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
-                          minHeight: '80px'
+                          minHeight: '80px',
+                          opacity: item.isAvailable === false ? 0.7 : 1,
+                          filter: item.isAvailable === false ? 'grayscale(0.6)' : 'none',
+                          cursor: item.isAvailable === false ? 'not-allowed' : 'pointer'
                         }}
                       >
                         <div style={{ display: 'flex', gap: '12px', flex: 1, minWidth: 0, alignItems: 'center' }}>
@@ -621,7 +631,9 @@ const POSPage = () => {
                             )}
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, minWidth: 0 }}>
-                            <strong style={{ fontSize: '15px', fontWeight: '700', color: '#1e293b' }}>{item.name}</strong>
+                            <strong style={{ fontSize: '15px', fontWeight: '700', color: '#1e293b' }}>
+                              {item.name} {item.isAvailable === false && <span style={{ color: '#ef4444', fontSize: '10px', marginLeft: '6px' }}>[SOLD OUT]</span>}
+                            </strong>
                             {item.description && (
                               <p style={{ 
                                 margin: 0, 
@@ -679,20 +691,22 @@ const POSPage = () => {
                           </div>
                         ) : (
                           <button 
-                            className="btn-primary pos-add-btn"
-                            onClick={() => handleAddToCart(item)}
+                            className={item.isAvailable === false ? "btn-secondary" : "btn-primary pos-add-btn"}
+                            onClick={() => item.isAvailable !== false && handleAddToCart(item)}
+                            disabled={item.isAvailable === false}
                             style={{ 
                               padding: '8px 20px', 
                               fontSize: '14px', 
                               borderRadius: '20px', 
                               fontWeight: '700', 
                               border: 'none', 
-                              backgroundColor: 'var(--primary-color)',
+                              backgroundColor: item.isAvailable === false ? '#cbd5e1' : 'var(--primary-color)',
                               color: 'white',
-                              flexShrink: 0
+                              flexShrink: 0,
+                              cursor: item.isAvailable === false ? 'not-allowed' : 'pointer'
                             }}
                           >
-                            Add
+                            {item.isAvailable === false ? 'Sold Out' : 'Add'}
                           </button>
                         )}
                       </div>

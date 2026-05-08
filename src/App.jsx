@@ -9,6 +9,7 @@ import BillingPage from './pages/billing/BillingPage';
 import QRPage from './pages/qr/QRPage';
 import QRGeneratorPage from './pages/admin/QRGeneratorPage';
 import ReportsPage from './pages/reports/ReportsPage';
+import FeedbackPage from './pages/admin/FeedbackPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 
@@ -52,6 +53,14 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={['ADMIN']}>
                 <ReportsPage />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/feedbacks" 
+            element={
+              <ProtectedRoute allowedRoles={['ADMIN']}>
+                <FeedbackPage />
               </ProtectedRoute>
             } 
           />

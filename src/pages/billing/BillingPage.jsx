@@ -31,9 +31,11 @@ const BillingPage = () => {
   const fetchReadyOrders = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/orders?status=READY');
-      // Sort descending by ID
-      const data = response.data.sort((a, b) => (b.orderId || b.id) - (a.orderId || a.id));
+      const response = await api.get('/orders?status=READY,PREPARING');
+      // Filter for orders that have at least one READY item, then sort
+      const data = response.data
+        .filter(o => o.items && o.items.some(i => i.status === 'READY'))
+        .sort((a, b) => (b.orderId || b.id) - (a.orderId || a.id));
       setOrders(data);
       if (data.length > 0) setFocusedOrderIndex(0);
     } catch (err) {
@@ -63,6 +65,13 @@ const BillingPage = () => {
   }, []);
 
   const handleGenerateBill = async (orderId) => {
+    // Check if there are any pending items in the kitchen for this order
+    const order = orders.find(o => (o.orderId || o.id) === orderId);
+    if (order && order.items && order.items.some(i => i.status !== 'READY' && i.status !== 'REJECTED')) {
+      showToast('There are still items pending in the kitchen. Please complete or reject them before generating the bill.', 'error');
+      return;
+    }
+
     setIsFetchingBill(true);
     try {
       const response = await api.get(`/orders/${orderId}/bill`);
@@ -75,6 +84,13 @@ const BillingPage = () => {
   };
 
   const handleCompletePayment = async (orderId) => {
+    // Check if there are any pending items in the kitchen for this order
+    const order = orders.find(o => (o.orderId || o.id) === orderId);
+    if (order && order.items && order.items.some(i => i.status !== 'READY' && i.status !== 'REJECTED')) {
+      showToast('There are still items pending in the kitchen. Please complete or reject them before closing the bill.', 'error');
+      return;
+    }
+
     try {
       await api.put(`/orders/${orderId}/status?status=COMPLETED`);
       showToast('Order completed successfully!', 'success');
@@ -82,6 +98,24 @@ const BillingPage = () => {
       fetchReadyOrders(); // Refresh the list
     } catch (err) {
       showToast('Failed to complete order status', 'error');
+    }
+  };
+
+  const toggleOrderItemStatus = async (orderId, itemId, currentStatus) => {
+    const newStatus = currentStatus === 'READY' ? 'PENDING' : 'READY';
+    try {
+      await api.put(`/orders/${orderId}/items/${itemId}/status?status=${newStatus}`);
+      setOrders(prev => prev.map(o => {
+        if (o.orderId === orderId) {
+          return {
+            ...o,
+            items: o.items.map(i => i.id === itemId ? { ...i, status: newStatus } : i)
+          };
+        }
+        return o;
+      }));
+    } catch (err) {
+      showToast('Failed to update item status', 'error');
     }
   };
 
@@ -318,15 +352,61 @@ const BillingPage = () => {
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
                   <h3 style={{ margin: 0, fontSize: '20px' }}>{order.tableName}</h3>
-                  <span className="badge" style={{ backgroundColor: '#f0fdf4', color: 'var(--success-color)', padding: '4px 12px', border: '1px solid #bbf7d0', borderRadius: '20px', fontSize: '12px', fontWeight: '700' }}>
-                    READY
+                  <span className="badge" style={{ 
+                    backgroundColor: order.status === 'READY' ? '#f0fdf4' : '#fef9c3', 
+                    color: order.status === 'READY' ? 'var(--success-color)' : '#854d0e', 
+                    padding: '4px 12px', 
+                    border: order.status === 'READY' ? '1px solid #bbf7d0' : '1px solid #fef08a', 
+                    borderRadius: '20px', fontSize: '12px', fontWeight: '700' 
+                  }}>
+                    {order.status}
                   </span>
                 </div>
-                <p style={{ fontSize: '15px', margin: '0 0 20px 0', color: 'var(--text-secondary)' }}>
-                  {order.items?.length || 0} Items · Order #{order.orderId}
-                </p>
+                
+                <div style={{ marginBottom: '16px', maxHeight: '120px', overflowY: 'auto' }}>
+                  <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                    {order.items && order.items.filter(item => item.status === 'READY').map((item, i) => {
+                      const isItemReady = item.status === 'READY';
+                      return (
+                        <li 
+                          key={item.id || i}
+                          onClick={(e) => { e.stopPropagation(); toggleOrderItemStatus(order.orderId, item.id, item.status); }}
+                          style={{ 
+                            display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px', 
+                            fontSize: '14px', cursor: 'pointer', opacity: 1 
+                          }}
+                        >
+                          <div style={{
+                            width: '18px', height: '18px', borderRadius: '4px',
+                            border: `1px solid var(--success-color)`,
+                            backgroundColor: 'var(--success-color)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: 'white', fontSize: '12px', flexShrink: 0
+                          }}>
+                            {isItemReady && '✓'}
+                          </div>
+                          <span style={{ fontWeight: '700' }}>{item.quantity}x</span>
+                          <span style={{ 
+                            textDecoration: 'none',
+                            color: 'var(--text-primary)'
+                          }}>
+                            {item.menuItemName || item.name}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontWeight: '800', fontSize: '22px' }}>₹{parseFloat(order.totalAmount).toFixed(2)}</span>
+                  <span style={{ fontWeight: '800', fontSize: '22px' }}>
+                    ₹{parseFloat(order.items?.reduce((sum, item) => {
+                      if (item.status !== 'READY') return sum;
+                      const price = parseFloat(item.totalPrice || 0);
+                      const tax = parseFloat(item.taxPercentage || 0);
+                      return sum + price + (price * tax / 100);
+                    }, 0) || 0).toFixed(2)}
+                  </span>
                   <div style={{ position: 'relative' }}>
                     <button 
                       className="btn-primary" 
@@ -517,10 +597,23 @@ const BillingPage = () => {
             <div className="receipt-container">
               {/* Shop Header */}
               <div style={{ textAlign: 'center', marginBottom: '20px', paddingBottom: '16px', borderBottom: '2px dashed var(--border-color)' }}>
-                <h2 style={{ margin: '0 0 4px 0', fontSize: '24px', fontWeight: '800' }}>{bill.shopInfo?.shopName || 'RestoGenie'}</h2>
-                {bill.shopInfo?.address && <p style={{ margin: '2px 0', fontSize: '13px', opacity: 0.8 }}>{bill.shopInfo.address}</p>}
-                {bill.shopInfo?.phone && <p style={{ margin: '2px 0', fontSize: '13px', fontWeight: '600' }}>Ph: {bill.shopInfo.phone}</p>}
-                {bill.shopInfo?.gstNumber && <p style={{ margin: '2px 0', fontSize: '12px', color: 'var(--text-secondary)' }}>GSTIN: {bill.shopInfo.gstNumber}</p>}
+                <h2 style={{ margin: '0 0 4px 0', fontSize: '22px', fontWeight: '800' }}>{bill.shopInfo?.shopName || 'RestoGenie'}</h2>
+                {bill.shopInfo?.address && (
+                  <div style={{ margin: '2px 0', fontSize: '12px', opacity: 0.8, lineHeight: '1.4' }}>
+                    {bill.shopInfo.address.length > 45 ? (
+                      <>
+                        <div>{bill.shopInfo.address.substring(0, bill.shopInfo.address.lastIndexOf(" ", 45))}</div>
+                        <div>{bill.shopInfo.address.substring(bill.shopInfo.address.lastIndexOf(" ", 45)).trim()}</div>
+                      </>
+                    ) : (
+                      bill.shopInfo.address
+                    )}
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginTop: '4px' }}>
+                  {bill.shopInfo?.phone && <span style={{ fontSize: '12px', fontWeight: '600' }}>Ph: {bill.shopInfo.phone}</span>}
+                  {bill.shopInfo?.gstNumber && <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>GSTIN: {bill.shopInfo.gstNumber}</span>}
+                </div>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '15px', fontWeight: '600' }}>
@@ -559,7 +652,7 @@ const BillingPage = () => {
                 </div>
                 {bill.gstAmount > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '14px' }}>
-                    <span>GST ({bill.gstPercentage || 0}%)</span>
+                    <span>Total GST</span>
                     <span>₹{parseFloat(bill.gstAmount).toFixed(2)}</span>
                   </div>
                 )}
@@ -568,6 +661,33 @@ const BillingPage = () => {
                   <span>₹{parseFloat(bill.totalAmount).toFixed(2)}</span>
                 </div>
               </div>
+
+              {/* GST Breakup Table */}
+              {bill.gstBreakup && bill.gstBreakup.length > 0 && (
+                <div style={{ marginTop: '20px', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '12px' }}>
+                  <p style={{ margin: '0 0 8px 0', fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)', textAlign: 'center', textTransform: 'uppercase' }}>GST Breakup</p>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left', opacity: 0.7 }}>
+                        <th style={{ padding: '4px 0' }}>Rate</th>
+                        <th style={{ textAlign: 'right' }}>Taxable</th>
+                        <th style={{ textAlign: 'right' }}>CGST</th>
+                        <th style={{ textAlign: 'right' }}>SGST</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bill.gstBreakup.map((row, idx) => (
+                        <tr key={idx}>
+                          <td style={{ padding: '4px 0' }}>{row.taxRate}%</td>
+                          <td style={{ textAlign: 'right' }}>{row.taxableAmount.toFixed(2)}</td>
+                          <td style={{ textAlign: 'right' }}>{row.cgstAmount.toFixed(2)}</td>
+                          <td style={{ textAlign: 'right' }}>{row.sgstAmount.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
               {bill.shopInfo?.footerMessage && (
                 <p style={{ textAlign: 'center', marginTop: '24px', fontSize: '14px', fontStyle: 'italic', color: 'var(--text-secondary)' }}>

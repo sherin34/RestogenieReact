@@ -22,15 +22,24 @@ const MenuItemManagement = () => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [defaultGst, setDefaultGst] = useState('5');
 
   const fetchData = async () => {
     try {
-      const [itemsRes, catsRes] = await Promise.all([
+      const [itemsRes, catsRes, billingRes] = await Promise.all([
         api.get('/admin/menu-items'),
-        api.get('/admin/categories')
+        api.get('/admin/categories'),
+        api.get('/admin/billing-settings').catch(() => ({ data: {} }))
       ]);
       setMenuItems(itemsRes.data);
       setCategories(catsRes.data);
+      const gst = billingRes.data.defaultGstRate?.toString() || '5';
+      setDefaultGst(gst);
+      
+      // If we're not editing, update the current form default
+      if (!editingId) {
+        setFormData(prev => ({ ...prev, gstPercentage: gst }));
+      }
     } catch (err) {
       showToast('Failed to fetch data', 'error');
     }
@@ -72,7 +81,7 @@ const MenuItemManagement = () => {
         showToast('Item added successfully', 'success');
       }
 
-      setFormData({ name: '', price: '', categoryId: '', gstPercentage: '5', description: '', isOnlineAvailable: false, onlinePrice: '', isAvailable: true });
+      setFormData({ name: '', price: '', categoryId: '', gstPercentage: defaultGst, description: '', isOnlineAvailable: false, onlinePrice: '', isAvailable: true });
       setSelectedFile(null);
       setEditingId(null);
       // Reset file input
@@ -245,7 +254,7 @@ const MenuItemManagement = () => {
             {editingId ? 'Update Item' : 'Add Item'}
           </button>
           {editingId && (
-            <button type="button" className="btn-secondary" onClick={() => { setEditingId(null); setFormData({ name: '', price: '', categoryId: '', gstPercentage: '5', description: '', isOnlineAvailable: false, onlinePrice: '' }); setSelectedFile(null); }} style={{ padding: '10px 20px' }}>
+            <button type="button" className="btn-secondary" onClick={() => { setEditingId(null); setFormData({ name: '', price: '', categoryId: '', gstPercentage: defaultGst, description: '', isOnlineAvailable: false, onlinePrice: '' }); setSelectedFile(null); }} style={{ padding: '10px 20px' }}>
               Cancel
             </button>
           )}

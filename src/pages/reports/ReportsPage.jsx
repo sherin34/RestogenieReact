@@ -16,6 +16,7 @@ const ReportsPage = () => {
     const [sourceData, setSourceData] = useState([]);
     const [hourlyData, setHourlyData] = useState([]);
     const [statementData, setStatementData] = useState([]);
+    const [rejectedOrders, setRejectedOrders] = useState([]);
     const [isStatementOpen, setIsStatementOpen] = useState(false);
     
     // Independent date state for Statement
@@ -56,17 +57,19 @@ const ReportsPage = () => {
         setLoading(true);
         try {
             const params = getDateParams(dateRange);
-            const [summaryRes, itemsRes, sourceRes, hourlyRes] = await Promise.all([
+            const [summaryRes, itemsRes, sourceRes, hourlyRes, rejectedRes] = await Promise.all([
                 api.get('/admin/reports/daily-summary', { params }),
                 api.get('/admin/reports/item-sales', { params }),
                 api.get('/admin/reports/order-source', { params }),
-                api.get('/admin/reports/hourly-sales', { params })
+                api.get('/admin/reports/hourly-sales', { params }),
+                api.get('/admin/reports/rejected-orders', { params })
             ]);
 
             setSummary(summaryRes.data);
             setItemSales(itemsRes.data);
             setSourceData(sourceRes.data);
             setHourlyData(hourlyRes.data);
+            setRejectedOrders(rejectedRes.data);
         } catch (error) {
             console.error('Error fetching reports:', error);
             showToast('Failed to fetch report data', 'error');
@@ -289,6 +292,48 @@ const ReportsPage = () => {
                                                     <td style={{ padding: '10px 4px', fontSize: '14px' }}>{data.hour}</td>
                                                     <td style={{ padding: '10px 4px', fontSize: '14px', textAlign: 'center' }}>{data.totalOrders}</td>
                                                     <td style={{ padding: '10px 4px', fontSize: '14px', textAlign: 'right', fontWeight: 'bold' }}>₹{data.totalRevenue.toFixed(2)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Rejected Orders Table */}
+                        <div className="card" style={{ padding: '20px', gridColumn: '1 / -1' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                <h3 style={{ margin: 0, fontSize: '18px', color: '#ef4444' }}>Rejected Orders Report</h3>
+                                <span style={{ fontSize: '12px', padding: '4px 10px', backgroundColor: '#fef2f2', color: '#ef4444', borderRadius: '20px', fontWeight: 'bold' }}>
+                                    {rejectedOrders.length} REJECTIONS
+                                </span>
+                            </div>
+                            {rejectedOrders.length === 0 ? (
+                                <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>No rejected orders in this period.</p>
+                            ) : (
+                                <div style={{ overflowX: 'auto' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                        <thead>
+                                            <tr style={{ borderBottom: '2px solid var(--border-color)', textAlign: 'left' }}>
+                                                <th style={{ padding: '10px 4px', fontSize: '14px' }}>Time</th>
+                                                <th style={{ padding: '10px 4px', fontSize: '14px' }}>Order ID</th>
+                                                <th style={{ padding: '10px 4px', fontSize: '14px' }}>Table</th>
+                                                <th style={{ padding: '10px 4px', fontSize: '14px' }}>Reason / Note</th>
+                                                <th style={{ padding: '10px 4px', fontSize: '14px', textAlign: 'right' }}>Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {rejectedOrders.map((order, idx) => (
+                                                <tr key={idx} style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: idx % 2 === 0 ? 'var(--bg-secondary)' : 'transparent' }}>
+                                                    <td style={{ padding: '12px 4px', fontSize: '13px' }}>
+                                                        {new Date(order.rejectedAt || order.dateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    </td>
+                                                    <td style={{ padding: '12px 4px', fontSize: '13px', fontWeight: '600' }}>#{order.orderId}</td>
+                                                    <td style={{ padding: '12px 4px', fontSize: '13px' }}>{order.tableName}</td>
+                                                    <td style={{ padding: '12px 4px', fontSize: '13px', fontStyle: 'italic', color: '#ef4444' }}>
+                                                        {order.rejectionNote || 'No reason provided'}
+                                                    </td>
+                                                    <td style={{ padding: '12px 4px', fontSize: '13px', textAlign: 'right', fontWeight: 'bold' }}>₹{order.totalAmount?.toFixed(2)}</td>
                                                 </tr>
                                             ))}
                                         </tbody>

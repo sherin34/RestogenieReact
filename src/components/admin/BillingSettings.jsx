@@ -13,6 +13,8 @@ const BillingSettings = () => {
     gstNumber: '',
     footerMessage: '',
     printerType: 'THERMAL_80MM',
+    defaultGstRate: '',
+    isKitchenEnabled: true,
   });
 
   useEffect(() => {
@@ -26,6 +28,8 @@ const BillingSettings = () => {
           gstNumber: res.data.gstNumber || '',
           footerMessage: res.data.footerMessage || '',
           printerType: res.data.printerType || 'THERMAL_80MM',
+          defaultGstRate: res.data.defaultGstRate || '',
+          isKitchenEnabled: res.data.isKitchenEnabled !== false, // default true
         });
       } catch (err) {
         // 404 / not yet configured is fine — form stays blank
@@ -67,13 +71,14 @@ const BillingSettings = () => {
         { label: 'Phone Number', name: 'phone', placeholder: '+91 99999 99999' },
         { label: 'GST Number', name: 'gstNumber', placeholder: 'e.g. 22ABCDE1234F1Z5' },
         { label: 'Bill Footer Message', name: 'footerMessage', placeholder: 'e.g. Thank you for visiting!' },
-      ].map(({ label, name, placeholder, required }) => (
+        { label: 'Default GST Rate (%)', name: 'defaultGstRate', placeholder: 'e.g. 5.0', type: 'number' },
+      ].map(({ label, name, placeholder, required, type }) => (
         <div key={name}>
           <label style={{ display: 'block', fontWeight: '500', marginBottom: '6px', fontSize: '14px' }}>
             {label}
           </label>
           <input
-            type="text"
+            type={type || 'text'}
             name={name}
             value={form[name]}
             onChange={handleChange}
@@ -114,6 +119,33 @@ const BillingSettings = () => {
           <option value="A4">A4 / Letter</option>
         </select>
       </div>
+      </div>
+
+      <div style={{ 
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
+        padding: '16px', backgroundColor: 'var(--bg-secondary)', borderRadius: '12px',
+        border: '1px solid var(--border-color)', marginTop: '8px'
+      }}>
+        <div>
+          <div style={{ fontWeight: '700', fontSize: '15px' }}>Kitchen Display System (KDS)</div>
+          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+            When OFF, orders will bypass the kitchen and be ready for billing immediately.
+          </div>
+        </div>
+        <div 
+          onClick={() => setForm(prev => ({ ...prev, isKitchenEnabled: !prev.isKitchenEnabled }))}
+          style={{
+            width: '48px', height: '24px', borderRadius: '12px', padding: '2px',
+            backgroundColor: form.isKitchenEnabled ? 'var(--primary-color)' : '#ccc',
+            cursor: 'pointer', transition: 'all 0.2s', position: 'relative'
+          }}
+        >
+          <div style={{
+            width: '20px', height: '20px', borderRadius: '10px', backgroundColor: 'white',
+            position: 'absolute', top: '2px', left: form.isKitchenEnabled ? '26px' : '2px',
+            transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+          }} />
+        </div>
       </div>
 
       <button

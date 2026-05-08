@@ -18,7 +18,16 @@ const KitchenPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [focusedOrderIndex, setFocusedOrderIndex] = useState(0);
-  const [showHotkeys, setShowHotkeys] = useState(true);
+  const [showHotkeys, setShowHotkeys] = useState(() => {
+    const saved = localStorage.getItem('kitchen_show_hotkeys');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('kitchen_show_hotkeys', JSON.stringify(showHotkeys));
+  }, [showHotkeys]);
+  const [selectedItemIds, setSelectedItemIds] = useState({}); // { [orderId]: [itemId1, itemId2] }
+  const [isPrinting, setIsPrinting] = useState(false);
 
   // Previous Orders States
   const [showPastOrders, setShowPastOrders] = useState(false);
@@ -75,6 +84,51 @@ const KitchenPage = () => {
     }
   };
 
+  const [rejectionOrder, setRejectionOrder] = useState(null);
+  const [rejectionNote, setRejectionNote] = useState('');
+
+  const handleRejectOrder = async () => {
+    if (!rejectionOrder) return;
+    const orderId = rejectionOrder.orderId || rejectionOrder.id;
+    try {
+      await api.put(`/orders/${orderId}/reject?note=${encodeURIComponent(rejectionNote)}`);
+      setOrders((prev) => prev.filter((o) => (o.orderId || o.id) !== orderId));
+      showToast('Order rejected.', 'info');
+      setRejectionOrder(null);
+      setRejectionNote('');
+      setFocusedOrderIndex(prev => Math.max(0, prev - 1));
+    } catch (err) {
+      console.error('Failed to reject order:', err);
+      showToast('Could not reject order.', 'error');
+    }
+  };
+
+  const toggleItemSelection = (orderId, itemId) => {
+    setSelectedItemIds(prev => {
+      const current = prev[orderId] || [];
+      if (current.includes(itemId)) {
+        return { ...prev, [orderId]: current.filter(id => id !== itemId) };
+      } else {
+        return { ...prev, [orderId]: [...current, itemId] };
+      }
+    });
+  };
+
+  const handleBulkUpdateStatus = async (orderId, newStatus) => {
+    const ids = selectedItemIds[orderId] || [];
+    if (ids.length === 0) return;
+    try {
+      await api.put(`/orders/${orderId}/items/status?status=${newStatus}`, ids);
+      // The backend broadcasts the update via WebSocket, which will update our 'orders' state
+      if (newStatus === 'READY') {
+        showToast('Selected items marked as ready.', 'success');
+      }
+    } catch (err) {
+      console.error('Failed to update items:', err);
+      showToast('Could not update items.', 'error');
+    }
+  };
+
   // Keyboard Shortcuts Logic
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -114,14 +168,23 @@ const KitchenPage = () => {
 
       const orderId = activeOrder.orderId || activeOrder.id;
 
+      const isLocked = (activeOrder.items || []).some(i => i.status === 'PREPARING');
+      const hasSelection = (selectedItemIds[orderId] || []).length > 0;
+
       // 'P' for Preparing
-      if ((e.key === 'p' || e.key === 'P') && activeOrder.status !== 'PREPARING' && activeOrder.status !== 'READY') {
-        updateOrderStatus(orderId, 'PREPARING');
+      if ((e.key === 'p' || e.key === 'P') && !isLocked && hasSelection && activeOrder.status !== 'READY') {
+        handleBulkUpdateStatus(orderId, 'PREPARING');
       }
 
-      // 'R' for Ready
+      // 'D' for Done/Ready
+      if ((e.key === 'd' || e.key === 'D') && hasSelection && activeOrder.status !== 'READY') {
+        handleBulkUpdateStatus(orderId, 'READY');
+      }
+
+      // 'R' for Reject
       if ((e.key === 'r' || e.key === 'R') && activeOrder.status !== 'READY') {
-        updateOrderStatus(orderId, 'READY');
+        setRejectionOrder(activeOrder);
+        setRejectionNote('');
       }
 
       // 'H' for History
@@ -135,11 +198,60 @@ const KitchenPage = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [orders, focusedOrderIndex, showPastOrders]);
 
+  const handlePrintKOT = async (orderId) => {
+    const itemIds = selectedItemIds[orderId] || [];
+    if (itemIds.length === 0) {
+      showToast('Please select items to print KOT', 'error');
+      return;
+    }
+    
+    setIsPrinting(true);
+    try {
+      const response = await api.get(`/billing/${orderId}/kot`, {
+        params: { itemIds: itemIds.join(',') },
+        responseType: 'blob',
+      });
+      
+      const file = new Blob([response.data], { type: 'application/pdf' });
+      const fileURL = URL.createObjectURL(file);
+      
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = fileURL;
+      document.body.appendChild(iframe);
+      
+      iframe.onload = () => {
+        iframe.contentWindow.print();
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+          URL.revokeObjectURL(fileURL);
+        }, 1000);
+      };
+      
+      showToast('KOT sent to printer!', 'success');
+    } catch (err) {
+      showToast('Failed to print KOT', 'error');
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
   useEffect(() => {
     const fetchOrders = async () => {
+      setLoading(true);
       try {
-        const response = await api.get('/orders?status=PLACED');
-        setOrders(response.data);
+        const response = await api.get('/orders?status=NEW,PREPARING');
+        const fetchedOrders = response.data;
+        setOrders(fetchedOrders);
+        
+        // Initialize selection: all non-READY items checked
+        const initialSelection = {};
+        fetchedOrders.forEach(order => {
+          initialSelection[order.orderId || order.id] = (order.items || [])
+            .filter(i => i.status !== 'READY')
+            .map(i => i.id);
+        });
+        setSelectedItemIds(initialSelection);
         setError(null);
       } catch (err) {
         console.error('Failed to fetch orders:', err);
@@ -160,12 +272,42 @@ const KitchenPage = () => {
           if (message.body) {
             const newOrder = JSON.parse(message.body);
             setOrders((prevOrders) => {
-              const exists = prevOrders.some(o => (o.orderId || o.id) === (newOrder.orderId || newOrder.id));
+              const orderId = newOrder.orderId || newOrder.id;
+              const exists = prevOrders.some(o => (o.orderId || o.id) === orderId);
+              
+              // Ensure newly added items in the broadcast are selected by default, and READY items are removed
+              setSelectedItemIds(prev => {
+                const orderId = newOrder.orderId || newOrder.id;
+                const activeIdsFromBroadcast = (newOrder.items || [])
+                  .filter(i => i.status !== 'READY')
+                  .map(i => i.id);
+                
+                const previousSelection = prev[orderId] || [];
+                
+                // 1. Remove items that are no longer active (marked READY)
+                const stillActiveSelection = previousSelection.filter(id => activeIdsFromBroadcast.includes(id));
+                
+                // 2. Identify BRAND NEW items that weren't in the order at all before
+                // We compare against ALL items in the order, not just active ones, to see if it's truly new
+                const isNewOrder = !prev[orderId];
+                
+                if (isNewOrder) {
+                  return { ...prev, [orderId]: activeIdsFromBroadcast };
+                } else {
+                  // For updates, we need to know what items were there before to identify "brand new" ones
+                  // However, we don't store the full item list in state separately. 
+                  // Let's use a simpler approach: if an active ID from broadcast wasn't in our previous selection 
+                  // AND it wasn't in the PREVIOUS items list of this order.
+                  
+                  // Keep what was selected, but remove anything that became READY
+                  const finalSelection = stillActiveSelection.length === 0 ? activeIdsFromBroadcast : stillActiveSelection;
+                  return { ...prev, [orderId]: finalSelection };
+                }
+              });
+
               if (exists) {
-                // Update existing order (e.g., items appended)
-                return prevOrders.map(o => (o.orderId || o.id) === (newOrder.orderId || newOrder.id) ? newOrder : o);
+                return prevOrders.map(o => (o.orderId || o.id) === orderId ? newOrder : o);
               }
-              // Prepend newly received order
               return [newOrder, ...prevOrders];
             });
           }
@@ -189,6 +331,7 @@ const KitchenPage = () => {
       case 'COMPLETED': return '#10b981';
       case 'DELIVERED': return '#3b82f6'; 
       case 'CANCELLED': return '#6b7280'; 
+      case 'REJECTED': return '#ef4444'; 
       default: return '#6b7280'; 
     }
   };
@@ -201,7 +344,8 @@ const KitchenPage = () => {
           <div style={{ display: 'flex', gap: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
             <span style={{ fontWeight: '700', padding: '2px 6px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}>1-9</span> Select
             <span style={{ fontWeight: '700', padding: '2px 6px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}>P</span> Preparing
-            <span style={{ fontWeight: '700', padding: '2px 6px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}>R</span> Ready
+            <span style={{ fontWeight: '700', padding: '2px 6px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}>D</span> Ready
+            <span style={{ fontWeight: '700', padding: '2px 6px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}>R</span> Reject
             <span style={{ fontWeight: '700', padding: '2px 6px', background: 'var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)' }}>H</span> History
           </div>
           <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', userSelect: 'none' }}>
@@ -310,57 +454,152 @@ const KitchenPage = () => {
                   )}
                   
                   <div style={{ marginBottom: '24px' }}>
-                    <ul style={{ margin: 0, paddingLeft: '0', listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {order.items && order.items.filter(i => i.status !== 'READY').map((item, itemIndex) => (
-                        <li key={itemIndex} style={{ fontSize: '18px', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                          <span style={{ fontWeight: '800', color: 'var(--primary-color)', minWidth: '30px' }}>{item.quantity}x</span> 
-                          <span style={{ fontWeight: '600' }}>{item.menuItemName || item.menuItem?.name || item.name}</span>
-                        </li>
-                      ))}
+                    <ul style={{ margin: 0, paddingLeft: '0', listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {order.items && order.items.filter(i => i.status !== 'READY' && i.status !== 'REJECTED').map((item, itemIndex) => {
+                        const isSelected = (selectedItemIds[order.orderId || order.id] || []).includes(item.id);
+                        const isPreparing = item.status === 'PREPARING';
+                        const isLocked = (order.items || []).some(i => i.status === 'PREPARING');
+                        
+                        return (
+                          <li 
+                            key={item.id || itemIndex} 
+                            onClick={(e) => { 
+                              e.stopPropagation(); 
+                              if (!isLocked) toggleItemSelection(order.orderId || order.id, item.id); 
+                            }}
+                            style={{ 
+                              fontSize: '18px', 
+                              display: 'flex', 
+                              gap: '12px', 
+                              alignItems: 'center',
+                              cursor: isLocked ? 'default' : 'pointer',
+                              transition: 'all 0.2s',
+                              opacity: isLocked && !isSelected ? 0.5 : 1
+                            }}
+                          >
+                            <div style={{
+                              width: '24px', height: '24px', borderRadius: '6px',
+                              border: `2px solid ${isSelected ? (isPreparing ? '#f59e0b' : 'var(--primary-color)') : 'var(--border-color)'}`,
+                              backgroundColor: isSelected ? (isPreparing ? '#f59e0b' : 'var(--primary-color)') : 'transparent',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              color: 'white', fontSize: '14px', flexShrink: 0
+                            }}>
+                              {isSelected && '✓'}
+                            </div>
+                            <span style={{ 
+                              fontWeight: '800', 
+                              color: isSelected ? (isPreparing ? '#f59e0b' : 'var(--primary-color)') : 'var(--text-secondary)', 
+                              minWidth: '30px',
+                            }}>
+                              {item.quantity}x
+                            </span> 
+                            <span style={{ 
+                              fontWeight: '600',
+                              color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)'
+                            }}>
+                              {item.menuItemName || item.menuItem?.name || item.name}
+                              {isPreparing && <span style={{ marginLeft: '8px', fontSize: '12px', color: '#f59e0b', fontWeight: '800' }}>(PREPARING)</span>}
+                            </span>
+                          </li>
+                        );
+                      })}
                     </ul>
-                    {order.items?.some(i => i.status === 'READY') && (
-                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '12px', opacity: 0.7 }}>
-                        ✓ Previously prepared items hidden
-                      </div>
-                    )}
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  {order.status !== 'READY' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <button 
+                    className="btn-secondary" 
+                    onClick={(e) => { e.stopPropagation(); handlePrintKOT(order.orderId || order.id); }}
+                    disabled={isPrinting || (selectedItemIds[order.orderId || order.id] || []).length === 0}
+                    style={{ 
+                      width: '100%', padding: '10px', borderRadius: '12px', fontWeight: '800', 
+                      backgroundColor: 'var(--bg-secondary)', border: '2px solid var(--primary-color)', color: 'var(--primary-color)',
+                      opacity: (isPrinting || (selectedItemIds[order.orderId || order.id] || []).length === 0) ? 0.5 : 1,
+                      cursor: (isPrinting || (selectedItemIds[order.orderId || order.id] || []).length === 0) ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    {isPrinting ? 'Preparing...' : '🖨️ Print KOT'}
+                  </button>
+
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    {order.status !== 'READY' && (
                     <>
-                      {order.status !== 'PREPARING' && (
-                        <div style={{ flex: 1, position: 'relative' }}>
-                          <button 
-                            className="btn-primary"
-                            onClick={(e) => { e.stopPropagation(); updateOrderStatus(order.orderId || order.id, 'PREPARING'); }}
-                            style={{ width: '100%', padding: '12px' }}
-                          >
-                            Prepare
-                          </button>
-                          {showHotkeys && isFocused && (
-                            <span className="desktop-only" style={{ position: 'absolute', top: '-10px', right: '-5px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>P</span>
-                          )}
-                        </div>
-                      )}
-                      <div style={{ flex: 1, position: 'relative' }}>
-                        <button 
-                          className="btn-success"
-                          onClick={(e) => { e.stopPropagation(); updateOrderStatus(order.orderId || order.id, 'READY'); }}
-                          style={{ width: '100%', padding: '12px' }}
-                        >
-                          Mark Ready
-                        </button>
-                        {showHotkeys && isFocused && (
-                          <span className="desktop-only" style={{ position: 'absolute', top: '-10px', right: '-5px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>R</span>
-                        )}
-                      </div>
+                      {(() => {
+                        const isLocked = (order.items || []).some(i => i.status === 'PREPARING');
+                        const hasSelection = (selectedItemIds[order.orderId || order.id] || []).length > 0;
+                        
+                        return (
+                          <>
+                            <div style={{ position: 'relative', flex: 1 }}>
+                              <button 
+                                className="btn-secondary" 
+                                onClick={(e) => { e.stopPropagation(); handleBulkUpdateStatus(order.orderId || order.id, 'PREPARING'); }}
+                                disabled={isLocked || !hasSelection}
+                                style={{ 
+                                  width: '100%', padding: '12px', borderRadius: '12px', fontWeight: '800', 
+                                  backgroundColor: '#991b1b', color: 'white', border: 'none',
+                                  opacity: (isLocked || !hasSelection) ? 0.5 : 1,
+                                  cursor: (isLocked || !hasSelection) ? 'not-allowed' : 'pointer'
+                                }}
+                              >
+                                Prepare
+                              </button>
+                              {showHotkeys && isFocused && (
+                                <span className="desktop-only" style={{ position: 'absolute', top: '-10px', right: '-5px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>P</span>
+                              )}
+                            </div>
+
+                            <div style={{ position: 'relative', flex: 1 }}>
+                              <button 
+                                className="btn-primary" 
+                                onClick={(e) => { e.stopPropagation(); handleBulkUpdateStatus(order.orderId || order.id, 'READY'); }}
+                                disabled={!hasSelection}
+                                style={{ 
+                                  width: '100%', padding: '12px', borderRadius: '12px', fontWeight: '800', 
+                                  backgroundColor: 'var(--success-color)', border: 'none',
+                                  opacity: !hasSelection ? 0.5 : 1,
+                                  cursor: !hasSelection ? 'not-allowed' : 'pointer'
+                                }}
+                              >
+                                Mark Ready
+                              </button>
+                              {showHotkeys && isFocused && (
+                                <span className="desktop-only" style={{ position: 'absolute', top: '-10px', right: '-5px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>D</span>
+                              )}
+                            </div>
+
+                            <div style={{ position: 'relative', flex: 1 }}>
+                              <button 
+                                className="btn-danger" 
+                                onClick={(e) => { e.stopPropagation(); handleBulkUpdateStatus(order.orderId || order.id, 'REJECTED'); }}
+                                disabled={!hasSelection}
+                                style={{ 
+                                  width: '100%', padding: '12px', borderRadius: '12px', fontWeight: '800', 
+                                  backgroundColor: '#ef4444', color: 'white', border: 'none',
+                                  opacity: !hasSelection ? 0.5 : 1,
+                                  cursor: !hasSelection ? 'not-allowed' : 'pointer'
+                                }}
+                              >
+                                Reject
+                              </button>
+                              {showHotkeys && isFocused && (
+                                <span className="desktop-only" style={{ position: 'absolute', top: '-10px', right: '-5px', background: '#000', color: '#fff', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>R</span>
+                              )}
+                            </div>
+                          </>
+                        );
+                      })()}
+
+                      {/* We can remove the old whole-order Reject button or keep it if needed */}
+                      {/* Keeping it for now but maybe it's redundant if items can be rejected */}
                     </>
                   )}
                 </div>
               </div>
-            );
-          })
+            </div>
+          );
+        })
         )}
       </div>
 
@@ -460,6 +699,46 @@ const KitchenPage = () => {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Reject Order Modal */}
+      {rejectionOrder && (
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: '20px',
+          backdropFilter: 'blur(8px)'
+        }}>
+          <div className="card" style={{ maxWidth: '400px', width: '100%', padding: '32px', borderRadius: '20px' }}>
+            <h2 style={{ margin: '0 0 16px 0', fontSize: '24px' }}>Reject Order?</h2>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: '20px' }}>
+              Are you sure you want to reject order from <strong>{rejectionOrder.tableName}</strong>?
+            </p>
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', marginBottom: '8px' }}>REJECTION NOTE (OPTIONAL)</label>
+              <textarea 
+                placeholder="e.g. Item out of stock, kitchen closed..." 
+                value={rejectionNote}
+                onChange={(e) => setRejectionNote(e.target.value)}
+                style={{ 
+                  width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid var(--border-color)', 
+                  fontSize: '14px', minHeight: '80px', resize: 'none', outline: 'none'
+                }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                onClick={() => setRejectionOrder(null)} 
+                className="btn-secondary" 
+                style={{ flex: 1, padding: '12px' }}
+              >Cancel</button>
+              <button 
+                onClick={handleRejectOrder} 
+                className="btn-danger" 
+                style={{ flex: 1, padding: '12px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '700' }}
+              >Reject Order</button>
+            </div>
           </div>
         </div>
       )}

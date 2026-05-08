@@ -48,6 +48,7 @@ const Layout = ({ children }) => {
     { to: '/dashboard', label: 'Dashboard', roles: ['ADMIN'] },
     { to: '/reports', label: 'Reports', roles: ['ADMIN'] },
     { to: '/qr-codes', label: 'QR Codes', roles: ['ADMIN'] },
+    { to: '/feedbacks', label: 'Feedback', roles: ['ADMIN'] },
     { to: '/admin', label: 'Admin', roles: ['ADMIN'] },
     { to: '/pos', label: 'POS', roles: ['ADMIN', 'WAITER'] },
     { to: '/kitchen', label: 'Kitchen', roles: ['ADMIN', 'KITCHEN'] },
