@@ -12,11 +12,13 @@ import ReportsPage from './pages/reports/ReportsPage';
 import FeedbackPage from './pages/admin/FeedbackPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
+import { Analytics } from "@vercel/analytics/react"
 
 function App() {
   return (
     <Router>
       <Layout>
+        <Analytics />
         {/* Route Definitions */}
         <Routes>
           {/* Public Routes */}
