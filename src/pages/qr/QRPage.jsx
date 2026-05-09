@@ -9,6 +9,24 @@ const STATUS_STEPS = [
   { key: 'READY', label: 'Ready to Serve', icon: '✅', description: 'Your order is ready!' },
 ];
 
+const SkeletonItem = () => (
+  <div style={{ display: 'flex', gap: '16px', padding: '16px', backgroundColor: 'white', borderRadius: '20px', marginBottom: '16px' }}>
+    <div className="shimmer" style={{ width: '80px', height: '80px', borderRadius: '16px', flexShrink: 0 }} />
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'center' }}>
+      <div className="shimmer" style={{ width: '60%', height: '16px', borderRadius: '4px' }} />
+      <div className="shimmer" style={{ width: '40%', height: '14px', borderRadius: '4px' }} />
+    </div>
+  </div>
+);
+
+const SkeletonCategory = () => (
+  <div style={{ marginBottom: '24px' }}>
+    <div className="shimmer" style={{ width: '120px', height: '24px', borderRadius: '6px', marginBottom: '16px' }} />
+    <SkeletonItem />
+    <SkeletonItem />
+  </div>
+);
+
 const CartPanel = ({ cartItems, totalBill, updateCartQuantity, removeFromCart, isPlacingOrder, onPlaceOrder }) => {
   const [expanded, setExpanded] = useState(false);
   const totalQty = cartItems.reduce((a, i) => a + i.quantity, 0);
@@ -110,6 +128,7 @@ const QRPage = () => {
   const { showToast } = useToast();
   const [menuItems, setMenuItems] = useState([]);
   const [restaurantName, setRestaurantName] = useState('Restaurant');
+  const [tableName, setTableName] = useState('');
   const [cartItems, setCartItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -228,6 +247,7 @@ const QRPage = () => {
         setMenuItems(response.data.categories);
         const name = response.data.restaurantName || 'Restaurant';
         setRestaurantName(name);
+        setTableName(response.data.tableName || '');
         document.title = `${name} - Digital Menu`;
         if (response.data.branding) {
           const b = response.data.branding;
@@ -335,7 +355,10 @@ const QRPage = () => {
               fontWeight: '800',
               border: '1px solid rgba(255, 255, 255, 0.25)'
             }}>
-               <span style={{ opacity: 0.7, fontWeight: '500' }}>Table</span> {qrToken.substring(0, 4)}...
+               {!tableName?.toLowerCase().includes('table') && (
+                 <span style={{ opacity: 0.7, fontWeight: '500' }}>Table </span>
+               )}
+               {tableName || qrToken.substring(0, 4)}
             </div>
 
             {branding.instagramUrl && (
@@ -400,10 +423,9 @@ const QRPage = () => {
         </div>
 
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '60px' }}>
-            <div className="shimmer" style={{ width: '100%', height: '200px', borderRadius: '20px', marginBottom: '20px' }}></div>
-            <div className="shimmer" style={{ width: '80%', height: '24px', borderRadius: '4px', margin: '0 auto 12px' }}></div>
-            <p style={{ color: '#94a3b8', fontWeight: '500' }}>Fetching delicious menu...</p>
+          <div style={{ paddingBottom: '100px' }}>
+            <SkeletonCategory />
+            <SkeletonCategory />
           </div>
         ) : error ? (
           <div style={{ textAlign: 'center', padding: '40px', backgroundColor: '#fef2f2', borderRadius: '16px', color: '#991b1b' }}>

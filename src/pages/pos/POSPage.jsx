@@ -133,6 +133,22 @@ const CartPanel = ({ cartItems, totalBill, updateCartQuantity, isPlacingOrder, o
   );
 };
 
+const SkeletonCard = () => (
+  <div className="pos-item-card" style={{ 
+    padding: '12px', display: 'flex', gap: '16px', backgroundColor: 'var(--card-bg)',
+    borderRadius: '16px', border: '1px solid var(--border-color)', opacity: 0.7
+  }}>
+    <div style={{ 
+      width: '80px', height: '80px', borderRadius: '12px', 
+      backgroundColor: '#f1f5f9', animation: 'pulse 1.5s infinite' 
+    }} />
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'center' }}>
+      <div style={{ width: '60%', height: '16px', backgroundColor: '#f1f5f9', borderRadius: '4px', animation: 'pulse 1.5s infinite' }} />
+      <div style={{ width: '30%', height: '14px', backgroundColor: '#f1f5f9', borderRadius: '4px', animation: 'pulse 1.5s infinite' }} />
+    </div>
+  </div>
+);
+
 const POSPage = () => {
   const { showToast } = useToast();
   const [tables, setTables] = useState([]);
@@ -149,6 +165,7 @@ const POSPage = () => {
     const saved = localStorage.getItem('pos_show_hotkeys');
     return saved !== null ? JSON.parse(saved) : true;
   });
+  const [menuLoading, setMenuLoading] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('pos_show_hotkeys', JSON.stringify(showHotkeys));
@@ -225,9 +242,11 @@ const POSPage = () => {
       setCartExpanded(false);
       setOnlineDetails({ customerName: '', customerPhone: '', notes: '' });
       const fetchMenu = async () => {
+        setMenuLoading(true);
         if (isOffline) {
           const cachedMenu = getCachedData('menuItems');
           if (cachedMenu) setMenuItems(cachedMenu);
+          setMenuLoading(false);
           return;
         }
         try {
@@ -238,6 +257,8 @@ const POSPage = () => {
           const cachedMenu = getCachedData('menuItems');
           if (cachedMenu) setMenuItems(cachedMenu);
           else setError(err.response?.data?.message || 'Failed to fetch menu items');
+        } finally {
+          setMenuLoading(false);
         }
       };
       fetchMenu();
@@ -582,7 +603,9 @@ const POSPage = () => {
 
               {/* Menu Items List - Sorted by Item sortOrder */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
-                {filteredMenuItems.length === 0 ? (
+                {menuLoading ? (
+                  [1,2,3,4,5].map(i => <SkeletonCard key={i} />)
+                ) : filteredMenuItems.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '40px' }}>
                     <p style={{ color: 'var(--text-secondary)' }}>No items found matches your search.</p>
                   </div>
